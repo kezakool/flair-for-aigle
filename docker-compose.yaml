@@ -1,0 +1,25 @@
+version: "3.11"
+services:
+  flair-for-aigle:
+    build:
+      context: .
+      dockerfile: .Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - type: bind
+        source: ${DATA_FOLDER}
+        target: ${DOCKER_DATA_FOLDER}
+      - type: bind
+        source: ${LOGS_FOLDER}
+        target: ${DOCKER_LOGS_FOLDER}
+      - type: bind
+        source: .
+        target: /app/flair-for-aigle
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
