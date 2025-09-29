@@ -1,5 +1,8 @@
 import argparse
-
+import sys
+import os
+# Add the project root folder to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from flair_zonal_detection.inference import run_inference
 
 def main() -> None:

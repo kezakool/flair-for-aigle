@@ -1,7 +1,7 @@
 # ======================
 # I/O
 # ======================
-output_path: ../results/
+output_path: /app/runs/runs/results
 output_name: test_zonal
 
 write_dataframe: False
@@ -11,13 +11,13 @@ cog_conversion: True
 # ======================
 # Model & Inference
 # ======================
-model_weights: ../FLAIR-HUB_LC-A_swinbase-upernet.safetensors
+model_weights: /app/runs/flair/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
 use_gpu: True
 batch_size: 1
-num_worker: 10 # 0 on Windows OS
+num_worker: 2 # 0 on Windows OS
 
-img_pixels_detection: 2048
-margin: 512
+img_pixels_detection: 512
+margin: 0
 output_px_meters: 0.2
 
 # ======================
@@ -41,12 +41,12 @@ modalities:
       SENTINEL1-DESC_TS : False
 
   AERIAL_RGBI:
-      input_img_path: ../ROI_D032-2019_UN-S1-U9_AERIAL_RGBI.tif
-      channels: [4, 1, 2]
+      input_img_path: /app/data/datasets/external/FLAIR-HUB_TOY/D006-2020_AERIAL_RGBI/FF-S1-14/D006-2020_AERIAL_RGBI_FF-S1-14_5-5.tif
+      channels: [1, 2, 3]
       normalization:
         type: custom
-        means: [106.59, 105.66, 111.35]
-        stds: [39.78, 52.23, 45.62]
+        means: [105.66, 111.35, 102.18 ]
+        stds: [52.23, 45.62, 44.30]
 
   AERIAL-RLT_PAN:
       input_img_path: /path/to/input_image.tif

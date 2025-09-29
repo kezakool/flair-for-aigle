@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "run flair zonal tiff",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/app/flair-for-aigle/flair_zonal_detection/main.py",
+            "console": "integratedTerminal",
+            "args": ["--config",
+            "/app/flair-for-aigle/configs/config_zonal_detection.yaml"
+        ]
+        }
+    ]
+}
