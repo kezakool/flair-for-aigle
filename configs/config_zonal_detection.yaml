@@ -45,7 +45,7 @@ modalities:
       channels: [1, 2, 3]
       normalization:
         type: custom
-        means: [105.66, 111.35, 102.18 ]
+        means: [105.66, 111.35, 102.18]
         stds: [52.23, 45.62, 44.30]
 
   AERIAL-RLT_PAN:

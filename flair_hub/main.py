@@ -1,6 +1,8 @@
 import argparse
 import sys
-
+import os
+# Add the project root folder to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from pathlib import Path
 
 from flair_hub.tasks.stages import training_stage, predict_stage

@@ -6,13 +6,23 @@
     "configurations": [
 
         {
-            "name": "run flair zonal tiff",
+            "name": "run flair zonal tiff inference",
             "type": "debugpy",
             "request": "launch",
             "program": "/app/flair-for-aigle/flair_zonal_detection/main.py",
             "console": "integratedTerminal",
             "args": ["--config",
             "/app/flair-for-aigle/configs/config_zonal_detection.yaml"
+        ]
+        },
+        {
+            "name": "run flair training",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/app/flair-for-aigle/flair_hub/main.py",
+            "console": "integratedTerminal",
+            "args": ["--config",
+            "/app/flair-for-aigle/configs/train/"
         ]
         }
     ]

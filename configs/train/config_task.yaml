@@ -2,22 +2,22 @@
 
 paths :   
 
-    out_folder: ../results/
-    out_model_name: test-lib
+    out_folder: /app/data/flair-results/
+    out_model_name: aigle-flair-seg
 
-    train_csv: ../toy/TRAIN_FLAIR-INC_TOY.csv
-    val_csv: ../toy/VALID_FLAIR-INC_TOY.csv
-    test_csv: ../toy/TEST_FLAIR-INC_TOY.csv
-    global_mtd_folder: FLAIR-HUB/GLOBAL_ALL_MTD/
-    ckpt_model_path: 
+    train_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_TRAIN.csv
+    val_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_VALID.csv
+    test_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_TEST.csv
+    global_mtd_folder: /app/data/datasets/external/FLAIR-HUB_TOY
+    ckpt_model_path: /app/runs/flair/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
 
 
 tasks: 
 
     train: True
     train_tasks: 
-        init_weights_only_from_ckpt: False
-        resume_training_from_ckpt: False
+        init_weights_only_from_ckpt: True
+        resume_training_from_ckpt: True
 
     predict: True
     write_files: True
@@ -28,7 +28,7 @@ tasks:
 hyperparams:
 
     num_epochs: 150
-    batch_size: 5
+    batch_size: 2
     seed: 2025
     learning_rate: 0.00005
 
@@ -57,4 +57,4 @@ saving:
     enable_progress_bar: True
     progress_rate: 10
     ckpt_verbose: True
-    verbose_config: False
+    verbose_config: True

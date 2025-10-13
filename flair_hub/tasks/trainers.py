@@ -89,12 +89,16 @@ def train(config: Dict[str, Any], data_module: Any, seg_module: nn.Module, out_d
         enable_progress_bar=config['saving']["enable_progress_bar"],
     )
 
+
     if config['tasks']['train_tasks']['resume_training_from_ckpt']:
         print('---------------------------------------------------------------')
         print('------------- RESUMING TRAINING FROM CKPT_PATH ----------------')
         print('---------------------------------------------------------------')
-        checkpoint = torch.load(config['paths']['ckpt_model_path'])
-        trainer.fit(seg_module, datamodule=data_module, ckpt_path=config['paths']['ckpt_model_path'])
+        # Load weights (supports .safetensors or state_dict)
+        from safetensors.torch import load_file
+        state_dict = load_file(config['paths']['ckpt_model_path'])
+        seg_module.load_state_dict(state_dict)
+        trainer.fit(seg_module, datamodule=data_module)
     else:
         trainer.fit(seg_module, datamodule=data_module)
 
