@@ -8,8 +8,8 @@ paths :
     train_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_TRAIN.csv
     val_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_VALID.csv
     test_csv: /app/flair-for-aigle/csv/FLAIR-HUB_TOY-DATASET_TEST.csv
-    global_mtd_folder: /app/data/datasets/external/FLAIR-HUB_TOY
-    ckpt_model_path: /app/runs/flair/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
+    global_mtd_folder: /app/data/FLAIR-HUB_TOY/GLOBAL_ALL_MTD
+    ckpt_model_path: /app/runs/models/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
 
 
 tasks: 
@@ -28,7 +28,7 @@ tasks:
 hyperparams:
 
     num_epochs: 150
-    batch_size: 2
+    batch_size: 5
     seed: 2025
     learning_rate: 0.00005
 

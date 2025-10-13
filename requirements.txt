@@ -1,0 +1,16 @@
+geopandas==1.0.1
+rasterio==1.4.3
+omegaconf
+jsonargparse
+matplotlib
+pandas==2.2.3
+scikit-image==0.25.2
+scikit-learn==1.6.1
+pillow
+torchmetrics==1.7.0
+pytorch-lightning==2.5.1
+segmentation-models-pytorch==0.4.0
+tensorboard==2.19.0
+pyarrow==19.0.0
+pyogrio==0.10.0
+safetensors==0.5.3
