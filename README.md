@@ -1,8 +1,22 @@
-<div align="center">
-  
-# FLAIR-HUB
-# Multimodal & multitask semantic segmentation of Earth Observation imagery
 
+  
+# Aigle segmentation project based on FLAIR-HUB work
+
+Set up your environnement :
+- set the .env file as example
+- docker compose up
+- set your s3 credentials with :
+    mkdir ~/.aws
+    nano ~/.aws/config
+    nano ~/.aws/credentials
+
+Run inference on aerial VHR images in a specific zone at a specific year :
+- customize the example config file  : /app/flair-for-aigle/configs/config_aigle_aerial_segmentation.json
+- run """python3 flair-for-aigle/main.py --config /path_to_your_config/config_aigle_aerial_segmentation.json"""
+
+
+# Flair HUB  initial project
+#### Multimodal & multitask semantic segmentation of Earth Observation imagery
 
 ![Static Badge](https://img.shields.io/badge/Code%3A-lightgrey?color=lightgrey) [![license](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/IGNF/FLAIR-HUB/blob/master/LICENSE) <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a> &emsp; ![Static Badge](https://img.shields.io/badge/Dataset%3A-lightgrey?color=lightgrey) [![license](https://img.shields.io/badge/License-IO%202.0-green.svg)](https://github.com/etalab/licence-ouverte/blob/master/open-licence.md)
@@ -36,7 +50,7 @@ Participate in obtaining more accurate maps for a more comprehensive description
 </div>
 <hr>
 
-## Context and data 
+#### Context and data 
 
 This repository is built on top of the **FLAIR-HUB** dataset, the largest multi-sensor land cover dataset with very-high-resolution (20\:cm) annotations, covering 2528\:km² of France. It combines six aligned modalities: aerial imagery, Sentinel-1/2 time series, SPOT imagery, topographic data, and historical aerial images. Extensive benchmarks evaluate multimodal fusion and deep learning models (CNNs, transformers) for land cover or crop mapping and also explore multi-task learning. Key figures of the dataset are : <br>
 
@@ -56,52 +70,13 @@ This repository is built on top of the **FLAIR-HUB** dataset, the largest multi-
 </table>
 </center>
 
-<hr>
-<br><br>
-
-## Installation 
-
-1. Conda env
-```
-$ conda create -n FLAIRHUB python>=3.10 
-```
-
-2. Force torch with GPU support
-```
-$ conda activate FLAIRHUB
-$ pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu126
-```
-3. Install flair-hub 
-```
-$ pip install -e . 
-```
-
-<hr>
-<br><br>
-
-## Entry points :mag_right:
-
-flair-hub has two entry points:
-
-#### :file_folder: src/flair_hub --> used to train, infer models, calculate metrics, at the patch level. <br>
-```
-$ flairhub --config /path/configs/train/
-```
-
-#### :file_folder: src/flair_zonal_detection --> used to infer a pretrained model over larger areas. <br>
-```
-$ flairhub_zonal --config /path/configs/config_zonal_detection.yaml
-```
 
 
-<hr>
-<br><br>
-
-## Configuration for flair-hub :page_facing_up:
+#### Configuration for flair-hub model training :page_facing_up:
 
 The pipeline takes as input a folder with 4 configuration YAML files or a single YAML file contaning all arguments. The configuration file includes sections for data paths, tasks, supervision, model configuration, hyperparameters and computational resources.
 
-#### config_task.yaml : <br>
+##### config_task.yaml : <br>
 ```yaml
 paths:
     out_folder: Directory to store all output results (models, logs, predictions).
@@ -154,7 +129,7 @@ saving:
     verbose_config: Print full config details to console.
 ```
 
-#### config_modalities.yaml : <br>
+##### config_modalities.yaml : <br>
 ```yaml
 modalities:
 
@@ -211,7 +186,7 @@ modalities:
         DEM_ELEV_stds  : Std. dev. of elevation values (DSM, DTM) if custom.
 ```
 
-#### config_models.yaml : <br>
+##### config_models.yaml : <br>
 ```yaml
 models:
 
@@ -238,7 +213,7 @@ models:
         padding_mode: Type of padding used in convolutions (e.g., reflect).
 ```
 
-#### config_supervision.yaml : <br>
+##### config_supervision.yaml : <br>
 ```yaml
 labels: # List of tasks
   - AERIAL_LABEL-COSIA
@@ -291,9 +266,9 @@ labels_configs:
 <br><br>
 
 
-### Configuration for flair_zonal_detection :page_facing_up:
+#### Configuration for flair_zonal_detection :page_facing_up:
 
-#### config_zonal_detection.yaml : <br>
+##### config_zonal_detection.yaml : <br>
 ```yaml
 # ======================
 # I/O
@@ -430,7 +405,7 @@ tasks:
 
 <br><br>
 
-## Baseline results
+#### Baseline results
 
 | Model ID | Aerial VHR | Elevation | SPOT | S2 t.s. | S1 t.s. | Historical | PARA. | O.A. | mIoU |
 |----------|------------|-----------|------|---------|---------|------------|--------|------|------|
@@ -464,7 +439,7 @@ tasks:
 
 
 
-## Inference classes and colors
+#### Inference classes and colors
 
 ```yaml
 flair_LC = 
@@ -519,7 +494,7 @@ flair_LPIS =
 
 
 
-## Reference
+#### Reference
 Cite the following article if you use the FLAIR #1 dataset:
 
 ```bibtex
@@ -540,12 +515,10 @@ DOI: https://doi.org/10.48550/arXiv.2506.07080
 ```
 
 
-
-
-## Acknowledgment
+#### Acknowledgment
 The experiments conducted in this study were performed using HPC/AI resources provided by GENCI-IDRIS (Grant 2024-A0161013803, 2024-AD011014286R2 and 2025-A0181013803).
 
-## Dataset license
+#### Dataset license
 
 The "OPEN LICENCE 2.0/LICENCE OUVERTE" is a license created by the French government specifically for the purpose of facilitating the dissemination of open data by public administration. 
 If you are looking for an English version of this license, you can find it on the official GitHub page at the [official github page](https://github.com/etalab/licence-ouverte).<br>

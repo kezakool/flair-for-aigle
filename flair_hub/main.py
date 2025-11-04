@@ -54,7 +54,7 @@ def main():
         out_dir_predict.mkdir(parents=True, exist_ok=True)
         predict_stage(config, dm, out_dir_predict, trained_state_dict)
     else:
-        print("[WARNING] Neither prediction nor metrics_only was enabled. Finishing.")
+        logger.info("[WARNING] Neither prediction nor metrics_only was enabled. Finishing.")
 
     end_msg()
 

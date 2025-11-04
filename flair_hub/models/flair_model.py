@@ -9,7 +9,8 @@ from pytorch_lightning.utilities.rank_zero import rank_zero_only
 
 from flair_hub.models.monotemp_model import FLAIR_Monotemp
 from flair_hub.models.multitemp_model import UTAE
-
+import logging
+logger = logging.getLogger(__name__)
 
 
 class FLAIR_HUB_Model(nn.Module):
@@ -284,8 +285,8 @@ class FLAIR_HUB_Model(nn.Module):
         table += "\n| {:<37}   {:<35}   {:<17}   {:>13,} |\n".format("Total parameters", "", "", total_params)
         table += ' '+"-"*113
 
-        print('')
-        print(table)
+        logger.info('')
+        logger.info(table)
 
 
     def calc_backbones_channels(self) -> list[int]:

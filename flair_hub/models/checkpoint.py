@@ -5,7 +5,8 @@ import torch.nn as nn
 from typing import Dict, Set, List, Any
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 from safetensors.torch import load_file as safe_load_file
-
+import logging
+logger = logging.getLogger(__name__)
 
 def reinit_param(state_dict: dict, model_dict: dict, key: str) -> bool:
     """
@@ -114,7 +115,7 @@ def check_and_reinit_layer(
     if real_key_weight:
         ckpt_classes = state_dict[real_key_weight].shape[0]
         if ckpt_classes != expected_classes:
-            print(f"→ Mismatch: {real_key_weight}: ckpt={ckpt_classes}, config={expected_classes}")
+            logger.info(f"→ Mismatch: {real_key_weight}: ckpt={ckpt_classes}, config={expected_classes}")
             reinit_counter[0] += reinit_param(state_dict, model_dict, key_weight)
             if real_key_bias:
                 reinit_counter[0] += reinit_param(state_dict, model_dict, key_bias)
@@ -122,7 +123,7 @@ def check_and_reinit_layer(
         else:
             matched_tasks.add(task_label)
     else:
-        print(f"→ Missing: {key_weight}")
+        logger.info(f"→ Missing: {key_weight}")
         if key_weight in model_dict:
             reinit_counter[0] += reinit_param(state_dict, model_dict, key_weight)
         if key_bias in model_dict:
@@ -161,14 +162,14 @@ def strip_model_prefix_if_needed(
                 stripped_state_dict[new_k] = v
                 strip_count += 1
                 if verbose and strip_count <= 5:
-                    print(f"→ Stripping prefix: {k} → {new_k}")
+                    logger.info(f"→ Stripping prefix: {k} → {new_k}")
             else:
                 stripped_state_dict[k] = v
         if strip_count > 0:
-            print(f"→ Stripped 'model.' prefix from {strip_count} keys.")
+            logger.info(f"→ Stripped 'model.' prefix from {strip_count} keys.")
         return stripped_state_dict
     else:
-        print("→ No prefix stripping needed.")
+        logger.info("→ No prefix stripping needed.")
         return state_dict
 
 
@@ -192,24 +193,24 @@ def load_checkpoint(
         None
     """
 
-    print("\n" + "#" * 65)
+    logger.info("\n" + "#" * 65)
     path = conf['paths']['ckpt_model_path']
-    print(f"→ Loading checkpoint from: {path}")
+    logger.info(f"→ Loading checkpoint from: {path}")
 
     if not path or not os.path.isfile(path):
-        print("❌ Invalid checkpoint path.")
+        logger.info("❌ Invalid checkpoint path.")
         if exit_on_fail:
             raise SystemExit()
         return
 
     is_safe = path.endswith(".safetensors")
     if is_safe:
-        print("→ Detected safetensors format.")
+        logger.info("→ Detected safetensors format.")
         state_dict = safe_load_file(path)
     else:
         ckpt = torch.load(path, map_location="cpu")
         state_dict = ckpt.get("state_dict", ckpt)
-    print(f"→ Original state dict keys: {len(state_dict)}")
+    logger.info(f"→ Original state dict keys: {len(state_dict)}")
 
     state_dict = strip_model_prefix_if_needed(state_dict, seg_module.state_dict(), verbose=False)
 
@@ -237,7 +238,7 @@ def load_checkpoint(
                 matched = True
                 break
         if not matched:
-            print(f"No valid weights found for task '{task}', reinitialized.")
+            logger.info(f"No valid weights found for task '{task}', reinitialized.")
 
     # Auxiliary decoders
     for key in model_dict:
@@ -253,7 +254,7 @@ def load_checkpoint(
         crit_key = f"criterion.{task}.weight"
         if crit_key in state_dict and crit_key in model_dict:
             if state_dict[crit_key].shape != model_dict[crit_key].shape:
-                print(f"→ Reinitializing criterion weights for {task}")
+                logger.info(f"→ Reinitializing criterion weights for {task}")
                 state_dict[crit_key] = model_dict[crit_key].clone()
                 reinit_counter[0] += 1
 
@@ -262,27 +263,28 @@ def load_checkpoint(
             ckpt_shape = state_dict[k].shape
             model_shape = model_dict[k].shape
             if "relative_position_bias_table" in k:
-                print(f"→ Interpolating {k}: {ckpt_shape} → {model_shape}")
+                logger.info(f"→ Interpolating {k}: {ckpt_shape} → {model_shape}")
                 try:
                     state_dict[k] = interpolate_bias_table(state_dict[k], model_dict[k])
                 except Exception as e:
-                    print(f"⚠️  Interpolation failed for {k}: {e}. Reinitializing instead.")
+                    logger.info(f"⚠️  Interpolation failed for {k}: {e}. Reinitializing instead.")
                     reinit_counter[0] += reinit_param(state_dict, model_dict, k)
             else:
-                print(f"→ Shape mismatch for {k}: checkpoint {ckpt_shape} vs model {model_shape}. Reinitializing...")
+                logger.info(f"→ Shape mismatch for {k}: checkpoint {ckpt_shape} vs model {model_shape}. Reinitializing...")
                 reinit_counter[0] += reinit_param(state_dict, model_dict, k)
 
-    print("\nExample param BEFORE loading weights:", next(iter(seg_module.parameters())).view(-1)[:5])
+    params_ex =  next(iter(seg_module.parameters())).view(-1)[:5]
+    logger.info(f"\nExample param BEFORE loading weights: {params_ex}")
     seg_module.load_state_dict(state_dict, strict=False)
-    print("Example param AFTER loading weights:", next(iter(seg_module.parameters())).view(-1)[:5])
+    logger.info(f"Example param AFTER loading weights: {params_ex}")
 
     # Summary
-    print("\nCheckpoint load summary:")
-    print(f"  - Tasks fully matched: {sorted(matched_tasks)}")
-    print(f"  - Tasks reinitialized: {sorted(reinit_tasks)}")
-    print(f"  - Total reinitialized tensors: {reinit_counter[0]}")
-    print(f"  - Tasks defined in config:")
+    logger.info("\nCheckpoint load summary:")
+    logger.info(f"  - Tasks fully matched: {sorted(matched_tasks)}")
+    logger.info(f"  - Tasks reinitialized: {sorted(reinit_tasks)}")
+    logger.info(f"  - Total reinitialized tensors: {reinit_counter[0]}")
+    logger.info(f"  - Tasks defined in config:")
     for task in tasks:
         ncls = len(conf['labels_configs'][task]['value_name'])
-        print(f"    • {task}: {ncls} classes")
-    print("#" * 65 + "\n")
+        logger.info(f"    • {task}: {ncls} classes")
+    logger.info("#" * 65 + "\n")

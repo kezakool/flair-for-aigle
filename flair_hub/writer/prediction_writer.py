@@ -12,7 +12,8 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix
 
 from flair_hub.writer.metrics_utils import compute_and_save_metrics
-
+import logging
+logger = logging.getLogger(__name__)
 
 def exit_ddp():
     if dist.is_available() and dist.is_initialized():
@@ -150,10 +151,10 @@ class PredictionWriter(BasePredictionWriter):
                     valid_preds += 1
 
                 except Exception as e:
-                    print(f"[ERROR] Failed to process {gt_path.name}: {e}")
+                    logger.info(f"[ERROR] Failed to process {gt_path.name}: {e}")
             
-            print(f"Confmat sum: {confmat_accum.sum()}")
-            print(f"Total GT images processed: {valid_preds} / {len(gt_paths)}")
+            logger.info(f"Confmat sum: {confmat_accum.sum()}")
+            logger.info(f"Total GT images processed: {valid_preds} / {len(gt_paths)}")
 
             if valid_preds > 0:
                 self.accumulated_confmats[task] = confmat_accum
@@ -161,6 +162,6 @@ class PredictionWriter(BasePredictionWriter):
                 any_predictions_found = True
 
         if not any_predictions_found:
-            print("\n[ERROR] No predictions found at all. Metrics will not be calculated.\n")
+            logger.info("\n[ERROR] No predictions found at all. Metrics will not be calculated.\n")
 
         exit_ddp()

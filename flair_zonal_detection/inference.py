@@ -2,19 +2,21 @@ import os
 import sys
 import torch
 import rasterio
-import traceback
 import time
-import datetime
+import geopandas as gpd
 import numpy as np
-
+import logging
+from itertools import islice
 from typing import Dict, Tuple
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from rasterio.io import DatasetReader
 from rasterio.windows import Window
+from rasterio.features import shapes
+from rasterio.transform import rowcol
+from shapely.geometry import shape
 from rasterio.transform import from_origin
 from scipy.ndimage import zoom
-
 from flair_zonal_detection.config import (
                                             load_config,
                                             validate_config,
@@ -33,19 +35,28 @@ from flair_zonal_detection.model_utils import (
 from flair_zonal_detection.slicing import generate_patches_from_reference
 
 
-def prep_config(config_path: str) -> Dict:
+logger = logging.getLogger(__name__)
+
+def overwrite_config(config: str, model_ckpt_path: str, model_threshold_filepath: str, result_folder: str, log_folder: str) -> Dict:
+    """
+    Overwrite flair config
+    """
+    config['model_weights'] = model_ckpt_path
+    config['model_threshold_filepath'] = model_threshold_filepath
+    config['output_path'] = result_folder
+    config['log_folder'] = log_folder
+    
+    return config
+    
+
+def prep_config(config_path: str, model_ckpt_path: str, model_threshold_filepath: str, result_folder: str, log_folder: str) -> Dict:
     """
     Load and validate configuration, initialize logging and device.
     """
     config = load_config(config_path)
-    log_filename = os.path.join(
-        config['output_path'],
-        f"{config['output_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    )
-
-    sys.stdout = Logger(filename=log_filename)
-    print(f"\n[LOGGER] Writing logs to: {log_filename}")
-
+    
+    config = overwrite_config(config, model_ckpt_path, model_threshold_filepath, result_folder, log_folder)
+    
     validate_config(config)
     config_recap_1(config)
     config = initialize_geometry_and_resolutions(config)
@@ -137,7 +148,7 @@ def prep_dataset(config: Dict, tiles_gdf, patch_sizes: Dict[str, int]) -> MultiM
     )
 
 
-def init_outputs(config: Dict, ref_img: DatasetReader) -> Tuple[Dict[str, DatasetReader], Dict[str, str]]:
+def init_outputs(config: Dict, ref_img: DatasetReader, i) -> Tuple[Dict[str, DatasetReader], Dict[str, str]]:
     """
     Initialize output raster files per task. Adjusts dimensions and transform if resolution differs.
     """
@@ -157,7 +168,7 @@ def init_outputs(config: Dict, ref_img: DatasetReader) -> Tuple[Dict[str, Datase
         suffix = 'argmax' if output_type == 'argmax' else 'class-prob'
         out_path = os.path.join(
             config['output_path'],
-            f"{config['output_name']}_{task['name']}_{suffix}.tif"
+            f"{config['output_name']}_{task['name']}_{suffix}_i.tif"
         )
 
         if not needs_rescale:
@@ -209,6 +220,31 @@ def resample_prediction(prediction: np.ndarray, scale: float) -> np.ndarray:
         raise ValueError(f"Unexpected prediction shape: {prediction.shape}")
 
 
+def load_geozone_contour(config):
+    """
+       Load geometry of processed geozone 
+    """
+    geozones_shapefilename = os.path.join(config.db_sources, os.getenv('GEOZONES_SHAPEFILE'))
+    if not os.path.exists(geozones_shapefilename):
+        logger.warning(f"Geozones shapefile not found, expecting cache file : {geozones_shapefilename}")
+        logger.info(f"Querying geozones from aigle bd topo...")
+        try:
+            # Read the SQL query into a GeoDataFrame
+            gdf = gpd.read_postgis("""select id, "name", geometry, geo_zone_type, name_normalized, iso_code  from detections.fr_geozone_view""", con=os.getenv('DB_STRING_PROD'), geom_col='geometry')  # Ensure 'geometry' is your geometry column
+
+            # Save the GeoDataFrame to a shapefile
+            gdf.to_file(geozones_shapefilename)
+            logger.info(f"Shapefile geozones created successfully at { geozones_shapefilename}")
+        except Exception as e :
+            logger.critical(f"A critical error occurred during query : {e}", exc_info=True)
+            sys.exit(1)
+    
+    gdf_geozone = gpd.read_file(geozones_shapefilename)
+    gdf_geozone.to_crs(config.input_crs, inplace=True)
+    geozone_contour_geometries = gdf_geozone[gdf_geozone.iso_code==config.geozones_codes].geometry.values
+    
+    return geozone_contour_geometries
+
 def inference_and_write(
     model: torch.nn.Module,
     dataloader: DataLoader,
@@ -228,11 +264,13 @@ def inference_and_write(
     ref_res = config['reference_resolution']
     out_res = config.get('output_px_meters', ref_res)  # fallback to ref_res if not set
     needs_rescale = abs(ref_res - out_res) > 1e-6
-    image_bounds = config['image_bounds']
+    image_left, image_bottom, image_right, image_top= list(ref_img.bounds)
+    image_bounds = {'left': image_left, 'bottom': image_bottom, 'right': image_right, 'top': image_top}
 
-    print("\n[ ] Starting inference and writing raster tiles...\n")
+    logger.info("\n[ ] Starting inference and writing raster tiles...\n")
 
     for batch in tqdm(dataloader, file=sys.stdout):
+        #logger.info(f"batch num : {batch['index']}")
         inputs = {
             mod: batch[mod].to(device)
             for mod in batch if mod not in ['index'] and not mod.endswith('_DATES')
@@ -258,6 +296,8 @@ def inference_and_write(
                 res_out = config.get("output_px_meters", res_ref)
                 needs_rescale = abs(res_out - res_ref) > 1e-6
                 scale = res_ref / res_out if needs_rescale else 1.0
+
+                #logger.info(f"Logits output desc : {logit_patch[0][0][:15]}")
 
                 if output_type == "argmax":
                     prediction = convert(logit_patch, "argmax")  # shape: (H, W)
@@ -289,13 +329,15 @@ def inference_and_write(
                     width_px = img_width - left_px
 
                 if height_px <= 0 or width_px <= 0:
-                    print(f"[!] Skipping tile {row['id']} — window out of bounds.")
+                    logger.info(f"[!] Skipping tile {row['id']} — window out of bounds.")
                     continue
 
                 # Crop prediction if needed
                 prediction = prediction[..., :height_px, :width_px]
-                window = Window(col_off=left_px, row_off=top_px, width=width_px, height=height_px)
-
+                window = Window(col_off=left_px, row_off=top_px, width=width_px, height=height_px,)
+                
+                #logger.info(f"Transfering prediction of tile {row['id']} into window {height_px}x{width_px} at position {left_px}-{top_px}")
+                
                 # Write
                 if output_type == "argmax":
                     output_files[task_name].write(prediction[0], 1, window=window)
@@ -308,6 +350,222 @@ def inference_and_write(
 
 
 
+def raster_to_polygons(
+    tiff_path: str,
+    ignore_background: bool = True,
+    background_value: int = 18,
+    min_area: float = 1.0,                     # filter small polygons (sq meters)
+    simplification: float = 0.1,               # polygon simplification tolerance
+) -> gpd.GeoDataFrame:
+    """
+    Extracts vector polygons from a raster TIFF where integer values represent classes.
+    
+    Returns GeoDataFrame with: class_id, geometry
+    """
+
+    # Load raster
+    with rasterio.open(tiff_path['AERIAL_LABEL-COSIA'].name) as src:
+        data = src.read(1)  # first band
+        transform = src.transform
+        crs = src.crs
+
+    # Unique class values
+    classes = np.unique(data)
+
+    if ignore_background:
+        classes = classes[classes != background_value]
+
+    polygons = []
+
+    # Loop class by class for efficiency
+    for cls in tqdm(classes, desc="Extracting polygons per class"):
+        mask = data == cls
+        if not np.any(mask):
+            continue
+
+        # shapes() extracts polygon boundaries for regions where mask==1
+        for geom, value in shapes(mask.astype(np.uint8), mask=mask, transform=transform):
+            poly = shape(geom)
+            if poly.is_empty:
+                continue
+            if poly.area < min_area:
+                continue
+
+            if simplification > 0:
+                poly = poly.simplify(simplification, preserve_topology=True)
+
+            polygons.append({
+                "class_id": int(cls),
+                "geometry": poly
+            })
+
+    gdf = gpd.GeoDataFrame(polygons, crs=crs)
+
+    return gdf
+
+def inference(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    tiles_gdf,
+    config: Dict,
+    raster_img: DatasetReader
+) -> None:
+    """
+    Run model inference and write predictions to raster files.
+    Supports resampling logits to output_px_meters if different from reference_resolution.
+    """
+    device = config['device']
+    margin_px = config['margin']
+    tile_size = config['img_pixels_detection']
+    output_type = config['output_type']
+    ref_res = config['reference_resolution']
+    out_res = config.get('output_px_meters', ref_res)  # fallback to ref_res if not set
+    needs_rescale = abs(ref_res - out_res) > 1e-6
+    image_bounds = config['image_bounds']
+
+    logger.info("\n[ ] Starting inference and writing raster tiles...\n")
+
+    transform = raster_img.transform
+    raster_result_shape = (model.task_nclasses,raster_img.shape[0],raster_img.shape[1])
+    raster_logits = np.zeros(raster_result_shape, dtype=np.int8)
+
+    for batch in tqdm(dataloader, file=sys.stdout):
+        inputs = {
+            mod: batch[mod].to(device)
+            for mod in batch if mod not in ['index'] and not mod.endswith('_DATES')
+        }
+        for mod in batch:
+            if mod.endswith('_DATES'):
+                inputs[mod] = batch[mod].to(device)
+
+        indices = batch['index'].cpu().numpy().flatten()
+        rows = tiles_gdf.iloc[indices]
+
+        with torch.no_grad():
+            logits_tasks, _ = model(inputs)
+
+        for task_name, logits in logits_tasks.items():
+            logits = logits.cpu().numpy()
+
+            for i, idx in enumerate(indices):
+                
+                row = rows.iloc[i]
+
+                logit_patch = logits[i, :, margin_px:tile_size - margin_px, margin_px:tile_size - margin_px]
+                res_ref = config["reference_resolution"]
+                res_out = config.get("output_px_meters", res_ref)
+                needs_rescale = abs(res_out - res_ref) > 1e-6
+                scale = res_ref / res_out if needs_rescale else 1.0
+
+                if needs_rescale:
+                    logit_patch = resample_prediction(logit_patch, scale)
+                    
+                prediction = convert(logit_patch, output_type)  # (C, H, W) dtypes to int8
+
+                # Top-left corner in output raster (CRS coordinates to pixels)
+                left = row['left']
+                top = row['top']
+                left_px = int(round((left - image_bounds['left']) / out_res))
+                top_px  = int(round((top - image_bounds['top']) / out_res))
+
+                c, h, w = prediction.shape
+
+                # Output raster dimensions
+                img_height = raster_logits.shape[1]
+                img_width  = raster_logits.shape[2]
+
+                # Output raster dimensions
+                img_height = int(round((image_bounds['top'] - image_bounds['bottom']) / out_res))
+                img_width  = int(round((image_bounds['right'] - image_bounds['left']) / out_res))
+
+                 # --- SAFETY CLIPPING ---
+                x1 = max(0, left_px)
+                y1 = max(0, top_px)
+                x2 = min(img_width, left_px + w)
+                y2 = min(img_height, top_px + h)
+
+                # Check if anything remains inside the raster
+                if x2 <= x1 or y2 <= y1:
+                    logger.warning(f"[!] Tile {row['id']} fully outside raster bounds. Skipping.")
+                    continue
+
+                # Crop the prediction accordingly
+                dx1 = x1 - left_px  # how much we cut from left of the patch
+                dy1 = y1 - top_px   # how much we cut from top of the patch
+                dx2 = dx1 + (x2 - x1)
+                dy2 = dy1 + (y2 - y1)
+
+                cropped_pred = prediction[:, dy1:dy2, dx1:dx2]
+                
+                raster_logits[:, y1:y2, x1:x2] += cropped_pred
+    
+    return raster_logits, transform
+
+def logits_to_labels_and_confidence(probs):
+    """
+    
+    """
+    labels = np.argmax(probs, axis=0).astype(np.uint8)
+    confidence = np.max(probs, axis=0)
+    return labels, confidence
+
+def vectorize_segmentation(labels, confidence, transform, crs="EPSG:5490", simplification_tolerance=1.0):
+    """
+    labels: HxW np.ndarray
+    confidence: HxW np.ndarray
+    transform: affine transform of full raster
+    class_map: {int: str} mapping class IDs → names
+    """
+    polygons = []
+    for geom, value in tqdm(shapes(labels, transform=transform)):
+        value = int(value)
+        if value == 0:
+            continue  # skip background
+        poly = shape(geom)
+        poly = poly.simplify(simplification_tolerance, preserve_topology=True)
+        mean_conf = float(confidence[labels == value].mean())
+        polygons.append({
+            "geometry": poly,
+            "class_id": value,
+            #"class_name": class_map.get(value, str(value)),
+            "confidence": mean_conf
+        })
+    return gpd.GeoDataFrame(polygons, crs=crs)
+
+
+def _vectorize_single_class(args):
+    class_id, labels, confidence, transform, simplification_tolerance, min_area = args
+    from shapely.geometry import shape
+    from rasterio.features import shapes
+
+    mask = labels == class_id
+    polygons = []
+    for geom, _ in tqdm(shapes(mask.astype(np.uint8), mask=mask, transform=transform),desc=f"vectorizing segmentation class : {class_id}"):
+        poly = shape(geom)
+        if not poly.is_valid or poly.is_empty or poly.area < min_area:
+            continue
+        poly = poly.simplify(simplification_tolerance, preserve_topology=True)
+        mean_conf = float(confidence[mask].mean())
+        polygons.append({"geometry": poly, "class_id": int(class_id), "confidence": mean_conf})
+    return polygons
+
+from multiprocessing import Pool
+
+def vectorize_segmentation_parallel(labels, confidence, transform, n_jobs=4, **kwargs):
+    class_ids = np.unique(labels)
+    class_ids = class_ids[class_ids != 0]
+
+    with Pool(processes=n_jobs) as pool:
+        results = pool.map(_vectorize_single_class, [
+            (cid, labels, confidence, transform, kwargs.get("simplification_tolerance", 1.0), kwargs.get("min_area", 4.0))
+            for cid in class_ids
+        ])
+
+    polygons = [p for sublist in results for p in sublist]
+    if len(polygons)>0:
+        return gpd.GeoDataFrame(polygons, crs=kwargs.get("crs", "EPSG:5490"))
+    else:
+        return gpd.GeoDataFrame()
 
 
 def postpro_outputs(temp_paths: Dict[str, str], config: Dict) -> None:
@@ -318,46 +576,37 @@ def postpro_outputs(temp_paths: Dict[str, str], config: Dict) -> None:
         for task_name, temp_path in temp_paths.items():
             cog_path = temp_path.replace(".tif", "_COG.tif")
             convert_to_cog(temp_path, cog_path)
-            print(f"\n[✓] Converted to COG: {cog_path}")
+            logger.info(f"\n[✓] Converted to COG: {cog_path}")
 
 
 def run_inference(config_path: str) -> None:
     """
     Main entry point to run inference from a config file.
     """
-    try:
-        start_total = time.time()
-        config = prep_config(config_path)
-        start_slice = time.time()
-        tiles_gdf = generate_patches_from_reference(config)
-        print(f"[✓] Sliced into {len(tiles_gdf)} tiles in {time.time() - start_slice:.2f}s")
 
-        start_model = time.time()
-        patch_sizes = compute_patch_sizes(config)
+    start_total = time.time()
+    config = prep_config(config_path)
+    start_slice = time.time()
+    tiles_gdf = generate_patches_from_reference(config)
+    logger.info(f"[✓] Sliced into {len(tiles_gdf)} tiles in {time.time() - start_slice:.2f}s")
 
-        model = build_inference_model(config, patch_sizes).to(config['device'])
-        print(f"[✓] Loaded model and checkpoint in {time.time() - start_model:.2f}s")
+    start_model = time.time()
+    patch_sizes = compute_patch_sizes(config)
 
-        dataset = prep_dataset(config, tiles_gdf, patch_sizes)
-        dataloader = DataLoader(dataset, batch_size=config['batch_size'], num_workers=config['num_worker'])
+    model = build_inference_model(config, patch_sizes).to(config['device'])
+    logger.info(f"[✓] Loaded model and checkpoint in {time.time() - start_model:.2f}s")
 
-        ref_img = rasterio.open(config['modalities'][config['reference_modality']]['input_img_path'])
-        output_files, temp_paths = init_outputs(config, ref_img)
+    dataset = prep_dataset(config, tiles_gdf, patch_sizes)
+    dataloader = DataLoader(dataset, batch_size=config['batch_size'], num_workers=config['num_worker'])
 
-        start_infer = time.time()
-        inference_and_write(model, dataloader, tiles_gdf, config, output_files, ref_img)
-        print(f"[✓] Inference completed in {time.time() - start_infer:.2f}s")
+    ref_img = rasterio.open(config['modalities'][config['reference_modality']]['input_img_path'])
+    output_files, temp_paths = init_outputs(config, ref_img)
 
-        postpro_outputs(temp_paths, config)
-        
-        print(f"\n[✓] Total time: {time.time() - start_total:.2f}s")
-        print(f"\n[✓] Inference complete. Rasters written to: {list(temp_paths.values())}\n")
+    start_infer = time.time()
+    inference_and_write(model, dataloader, tiles_gdf, config, output_files, ref_img)
+    logger.info(f"[✓] Inference completed in {time.time() - start_infer:.2f}s")
 
-    except Exception:
-        print("\n[✗] Inference failed with an error:")
-        print("-" * 60)
-        traceback.print_exc()
-        print("-" * 60)
-    finally:
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
+    postpro_outputs(temp_paths, config)
+    
+    logger.info(f"\n[✓] Total time: {time.time() - start_total:.2f}s")
+    logger.info(f"\n[✓] Inference complete. Rasters written to: {list(temp_paths.values())}\n")

@@ -5,6 +5,8 @@ from typing import Dict, Any
 from flair_hub.models.flair_model import FLAIR_HUB_Model
 from flair_hub.models.checkpoint import load_checkpoint
 
+import logging
+logger = logging.getLogger(__name__)
 
 def get_resolution(path: str) -> float:
     """
@@ -28,7 +30,7 @@ def compute_patch_sizes(config: Dict[str, Any]) -> Dict[str, int]:
         scale = mod_res / target_res
         patch_sizes[mod] = int(round(config['img_pixels_detection'] / scale))
 
-    print('PATCH SIZES ---> ', patch_sizes)
+    logger.info('PATCH SIZES ---> ', patch_sizes)
 
     return patch_sizes
 

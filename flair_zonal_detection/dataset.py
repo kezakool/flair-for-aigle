@@ -18,6 +18,8 @@ from flair_hub.data.utils_data.sentinel import (
                                                 temporal_average
 )
 
+import logging
+logger = logging.getLogger(__name__)
 
 class MultiModalSlicedDataset(Dataset):
     """
@@ -111,6 +113,7 @@ class MultiModalSlicedDataset(Dataset):
             boundless=True,
             fill_value=0
         )
+        #logger.info(f"window : {window} - values : {patch[0][0][:15]}")
         return patch, window
 
     def _normalize_patch(self, patch: np.ndarray, cfg: Dict[str, Any]) -> np.ndarray:
@@ -173,7 +176,9 @@ class MultiModalSlicedDataset(Dataset):
         row = self.df.iloc[idx]
         bounds = row.geometry.bounds
         tile_data: Dict[str, torch.Tensor] = {}
-
+        
+        #logger.info(f"Calling dataset idx : {idx} - bounds {bounds}")
+        
         for mod_name, cfg in self.modalities.items():
             reader = self.readers[mod_name]
             patch_size = self.patch_sizes[mod_name]
@@ -191,7 +196,7 @@ class MultiModalSlicedDataset(Dataset):
                 tile_data[mod_name] = torch.tensor(np.ascontiguousarray(patch), dtype=torch.float32)
                 tile_data[mod_name + '_RAW'] = torch.tensor(np.ascontiguousarray(raw_patch), dtype=torch.float32)
                 if mod_name == "DEM_ELEV":
-                    print(f"[DEBUG] DEM_ELEV torch tensor contiguous: {tile_data[mod_name].is_contiguous()}, shape: {tile_data[mod_name].shape}")
+                    logger.info(f"[DEBUG] DEM_ELEV torch tensor contiguous: {tile_data[mod_name].is_contiguous()}, shape: {tile_data[mod_name].shape}")
 
 
         tile_data['index'] = torch.tensor([idx], dtype=torch.long)

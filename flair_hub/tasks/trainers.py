@@ -11,7 +11,8 @@ from pytorch_lightning.callbacks.progress.tqdm_progress import TQDMProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from flair_hub.writer.prediction_writer import PredictionWriter
-
+import logging
+logger = logging.getLogger(__name__)
 
 def check_batchnorm_and_batch_size(config: Dict[str, Any], seg_module: nn.Module) -> None:
     """
@@ -25,9 +26,9 @@ def check_batchnorm_and_batch_size(config: Dict[str, Any], seg_module: nn.Module
 
     for module in seg_module.modules():
         if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and batch_size == 1:
-            print("Warning: The model contains BatchNorm layers and the batch size is set to 1.")
-            print("Aborting training to avoid potential issues.")
-            print("Please set a batch size >1 in the current model provider configuration.")
+            logger.info("Warning: The model contains BatchNorm layers and the batch size is set to 1.")
+            logger.info("Aborting training to avoid potential issues.")
+            logger.info("Please set a batch size >1 in the current model provider configuration.")
             sys.exit(1)
 
 
@@ -91,9 +92,9 @@ def train(config: Dict[str, Any], data_module: Any, seg_module: nn.Module, out_d
 
 
     if config['tasks']['train_tasks']['resume_training_from_ckpt']:
-        print('---------------------------------------------------------------')
-        print('------------- RESUMING TRAINING FROM CKPT_PATH ----------------')
-        print('---------------------------------------------------------------')
+        logger.info('---------------------------------------------------------------')
+        logger.info('------------- RESUMING TRAINING FROM CKPT_PATH ----------------')
+        logger.info('---------------------------------------------------------------')
         # Load weights (supports .safetensors or state_dict)
         from safetensors.torch import load_file
         state_dict = load_file(config['paths']['ckpt_model_path'])

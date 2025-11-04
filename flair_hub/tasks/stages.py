@@ -12,7 +12,8 @@ from flair_hub.writer.prediction_writer import PredictionWriter
 from flair_hub.tasks.trainers import train, predict
 from flair_hub.models.checkpoint import load_checkpoint
 from flair_hub.tasks.module_setup import get_input_img_sizes, build_segmentation_module
-
+import logging
+logger = logging.getLogger(__name__)
 
 
 def training_stage(
@@ -49,10 +50,10 @@ def training_stage(
     training_time_seconds = end - start
     training_time_seconds = training_time_seconds.total_seconds()
 
-    print(f"\n[Training finished in {str(timedelta(seconds=training_time_seconds))} HH:MM:SS with "
+    logger.info(f"\n[Training finished in {str(timedelta(seconds=training_time_seconds))} HH:MM:SS with "
           f"{config['hardware']['num_nodes']} nodes and {config['hardware']['gpus_per_node']} gpus per node]")
-    print(f"Model path: {os.path.join(out_dir, 'checkpoints')}\n\n")
-    print('-' * 40)
+    logger.info(f"Model path: {os.path.join(out_dir, 'checkpoints')}\n\n")
+    logger.info('-' * 40)
 
     return best_trained_state_dict
 
@@ -80,7 +81,7 @@ def predict_stage(
     out_dir_predict = Path(out_dir_predict)
 
     if config['tasks'].get("metrics_only", False) and not config['tasks'].get("predict", False):
-        print("[ ] Running in metrics-only mode: loading predictions from disk . . .")
+        logger.info("[ ] Running in metrics-only mode: loading predictions from disk . . .")
         writer = PredictionWriter(config, out_dir_predict, write_interval="batch")
         writer.load_predictions_and_compute_metrics()
         return 
@@ -94,8 +95,8 @@ def predict_stage(
         else:
             load_checkpoint(config, seg_module)
 
-        print("[ ] Running inference and metrics calculation . . .")
+        logger.info("[ ] Running inference and metrics calculation . . .")
         predict(config, data_module, seg_module, out_dir_predict)
 
     if not config['tasks'].get("predict") and not config['tasks'].get("metrics_only"):
-        print("[ ] Neither 'predict' nor 'metrics_only' is enabled. Finishing.")
+        logger.info("[ ] Neither 'predict' nor 'metrics_only' is enabled. Finishing.")

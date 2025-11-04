@@ -2,7 +2,8 @@ import sys
 import numpy as np
 
 from skimage import img_as_float
-
+import logging
+logger = logging.getLogger(__name__)
 
 def norm(
     in_img: np.ndarray, 
@@ -30,12 +31,12 @@ def norm(
     """
     try:
         if norm_type not in ['scaling', 'custom', 'without']:
-            print("Error: Normalization argument should be 'scaling', 'custom', or 'without'.")
+            logger.info("Error: Normalization argument should be 'scaling', 'custom', or 'without'.")
             sys.exit(1)
         
         if norm_type == 'custom':
             if len(means) != len(stds):
-                print("Error: If using 'custom', the provided means and stds must have the same length.")
+                logger.info("Error: If using 'custom', the provided means and stds must have the same length.")
                 sys.exit(1)
             in_img = in_img.astype(np.float64)
             for i in range(in_img.shape[0]):  # Assuming first dimension is channels
@@ -47,5 +48,5 @@ def norm(
         return in_img
     
     except Exception as e:
-        print(f"Unexpected error during normalization: {e}")
+        logger.info(f"Unexpected error during normalization: {e}")
         sys.exit(1)

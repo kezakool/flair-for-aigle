@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     gdal-bin \
     libgdal-dev \
     libgl1-mesa-glx \
+    nano \
     git \
     && rm -rf /var/lib/apt/lists/*
 

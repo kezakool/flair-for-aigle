@@ -12,7 +12,7 @@
             "program": "/app/flair-for-aigle/flair_zonal_detection/main.py",
             "console": "integratedTerminal",
             "args": ["--config",
-            "/app/flair-for-aigle/configs/config_zonal_detection.yaml"
+            "/app/flair-for-aigle/configs/config_model_zonal_segmentation.yaml"
         ]
         },
         {
@@ -23,6 +23,16 @@
             "console": "integratedTerminal",
             "args": ["--config",
             "/app/flair-for-aigle/configs/train/"
+        ]
+        },
+        {
+            "name": "run aigle segmentation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/app/flair-for-aigle/main.py",
+            "console": "integratedTerminal",
+            "args": ["--config",
+            "/app/flair-for-aigle/configs/config_aigle_aerial_segmentation.json"
         ]
         }
     ]

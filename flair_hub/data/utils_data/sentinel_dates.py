@@ -4,7 +4,8 @@ import numpy as np
 import json
 
 from typing import Dict, Tuple, Any, Set
-
+import logging
+logger = logging.getLogger(__name__)
 
 def prepare_sentinel_dates(
     config: Dict[str, Any],
@@ -44,7 +45,7 @@ def prepare_sentinel_dates(
                 dates_array.append(original_date)
                 diff_dates_array.append(diff_days)
             except ValueError as e:
-                print(f"Invalid date encountered: {date_str}. Error: {e}")
+                logger.info(f"Invalid date encountered: {date_str}. Error: {e}")
 
         dict_dates[patch_id] = {
             'dates': np.array(dates_array),

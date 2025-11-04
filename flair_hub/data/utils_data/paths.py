@@ -4,7 +4,8 @@ import pandas as pd
 from typing import Dict, Any, Tuple, Optional, List, Set
 
 from flair_hub.data.utils_data.sentinel_dates import get_sentinel_dates_mtd
-
+import logging
+logger = logging.getLogger(__name__)
 
 def extract_sentinel_patch_ids(dicts: List[Dict]) -> Set[str]:
     """
@@ -47,13 +48,13 @@ def get_paths(config: Dict[str, Any], split: str = 'train') -> Dict:
     elif split == 'test':
         csv_path = config['paths']['test_csv']
     else:
-        print("Invalid split specified.")
+        logger.info("Invalid split specified.")
         raise SystemExit()
 
     if csv_path is not None and os.path.isfile(csv_path) and csv_path.endswith('.csv'):
         paths = pd.read_csv(csv_path)
     else:
-        print(f"Invalid .csv file path for {split} split.")
+        logger.info(f"Invalid .csv file path for {split} split.")
         raise SystemExit()
 
     dict_paths = {modality: [] for modality in config['modalities']['inputs'].keys()}

@@ -5,7 +5,8 @@ import pytorch_lightning as pl
 from typing import Dict, Any
 from torchmetrics.classification import MulticlassJaccardIndex
 from torchmetrics.aggregation import MeanMetric
-
+import logging
+logger = logging.getLogger(__name__)
 
 class SegmentationTask(pl.LightningModule):
     """
@@ -202,7 +203,7 @@ class SegmentationTask(pl.LightningModule):
         """
         if torch.isnan(loss).any() or torch.isinf(loss).any():
             kind = "auxiliary" if is_aux else "main"
-            print(f"NaN or Inf detected in {kind} loss for task {task}")
+            logger.info(f"NaN or Inf detected in {kind} loss for task {task}")
 
     def training_step(self, batch, batch_idx):
         loss, all_preds, all_targets = self.step(batch, training=True)
@@ -219,14 +220,14 @@ class SegmentationTask(pl.LightningModule):
             if isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
                 warmup_steps = int(self.config['hyperparams']['warmup_fraction'] * self.trainer.estimated_stepping_batches)
                 if self.global_step == warmup_steps:
-                    print(f"\n--->---> Warmup phase completed at step {self.global_step}! LR: {scheduler.get_last_lr()[0]:.6f}")
+                    logger.info(f"\n--->---> Warmup phase completed at step {self.global_step}! LR: {scheduler.get_last_lr()[0]:.6f}")
 
         elif scheduler_type == "cycle_then_plateau" and not self._using_plateau:
             if self.global_step < self._warmup_scheduler.total_steps:
                 self._warmup_scheduler.step()
             if self.global_step == self._warmup_scheduler.total_steps:
                 self._using_plateau = True
-                print(f"\n---->---> Switched to ReduceLROnPlateau at step {self.global_step}! LR: {self._warmup_scheduler.get_last_lr()[0]:.6f}")
+                logger.info(f"\n---->---> Switched to ReduceLROnPlateau at step {self.global_step}! LR: {self._warmup_scheduler.get_last_lr()[0]:.6f}")
 
     def on_train_epoch_end(self):
         self._log_learning_rate()

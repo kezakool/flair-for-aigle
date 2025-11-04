@@ -2,11 +2,12 @@ import sys, os
 import datetime
 
 from pytorch_lightning.utilities.rank_zero import rank_zero_only  
-
+import logging
+logger = logging.getLogger(__name__)
 
 @rank_zero_only
 def start_msg():
-    print("""
+    logger.info("""
   _____ _        _    ___ ____       _   _ _   _ ____  
  |  ___| |      / \  |_ _|  _ \     | | | | | | | __ ) 
  | |_  | |     / _ \  | || |_) _____| |_| | | | |  _ \ 
@@ -17,8 +18,8 @@ _______________________________________________________
 #######################################################         
 ####################  LAUNCHING #######################
     """)
-    print(datetime.datetime.now().strftime("Starting: %Y-%m-%d  %H:%M") + '\n')
-    print("""
+    logger.info(datetime.datetime.now().strftime("Starting: %Y-%m-%d  %H:%M") + '\n')
+    logger.info("""
 [ ] Setting up Logger     . . .
 [ ] Creating output files . . . 
 [ ] Reading config files  . . .
@@ -30,11 +31,11 @@ _______________________________________________________
 
 @rank_zero_only
 def end_msg():
-    print("""
+    logger.info("""
 #######################################################         
 ####################  FINISHED  #######################    
 """)
-    print(datetime.datetime.now().strftime("Ending: %Y-%m-%d  %H:%M") + '\n')
+    logger.info(datetime.datetime.now().strftime("Ending: %Y-%m-%d  %H:%M") + '\n')
     
 
 

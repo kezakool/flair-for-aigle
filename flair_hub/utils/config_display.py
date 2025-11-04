@@ -1,6 +1,7 @@
 from typing import Optional
 from pytorch_lightning.utilities.rank_zero import rank_zero_only  
-
+import logging
+logger = logging.getLogger(__name__)
 
 @rank_zero_only
 def print_recap(config: dict,
@@ -37,23 +38,23 @@ def print_recap(config: dict,
             if isinstance(v, dict):
                 if filter_section and all(x in [False, 0, None, "", [], {}] for x in v.values()):
                     continue
-                print(f'{prefix}|- {k}:')
+                logger.info(f'{prefix}|- {k}:')
                 walk_config(v, prefix + '|   ', filter_section, active_inputs, parent_key=k)
             elif isinstance(v, list):
                 if not filter_section or v:
-                    print(f'{prefix}|- {k}: {v}')
+                    logger.info(f'{prefix}|- {k}: {v}')
             else:
                 if not filter_section or v not in [False, 0, None, "", [], {}]:
-                    print(f'{prefix}|- {k}: {v}')
+                    logger.info(f'{prefix}|- {k}: {v}')
 
     verbose = config.get("saving", {}).get("verbose_config", True)
     inputs = config.get("modalities", {}).get("inputs", {})
     active_inputs = {k for k, v in inputs.items() if v}
 
-    print("Configuration Tree:")
+    logger.info("Configuration Tree:")
     for section_key, section_value in config.items():
         if isinstance(section_value, dict):
-            print(f'|- {section_key}:')
+            logger.info(f'|- {section_key}:')
             if section_key == "modalities":
                 walk_config(section_value, prefix='|   ',
                             filter_section=not verbose,
@@ -62,7 +63,7 @@ def print_recap(config: dict,
                 walk_config(section_value, prefix='|   ',
                             filter_section=not verbose)
         else:
-            print(f'|- {section_key}: {section_value}')
+            logger.info(f'|- {section_key}: {section_value}')
 
     list_keys = [
         'AERIAL_RGBI', 'AERIAL-RLT_PAN', 'DEM_ELEV', 'SPOT_RGBI',
@@ -71,19 +72,19 @@ def print_recap(config: dict,
     for label in config.get('labels', []):
         list_keys.append(label)
 
-    print('\n[---DATA SPLIT---]')
+    logger.info('\n[---DATA SPLIT---]')
     if config['tasks'].get('train', False):
-        print('[TRAIN]')
+        logger.info('[TRAIN]')
         for key in list_keys:
             if dict_train and dict_train.get(key):
-                print(f"- {key:20s}: {len(dict_train[key])} samples")
-        print('[VAL]')
+                logger.info(f"- {key:20s}: {len(dict_train[key])} samples")
+        logger.info('[VAL]')
         for key in list_keys:
             if dict_val and dict_val.get(key):
-                print(f"- {key:20s}: {len(dict_val[key])} samples")
+                logger.info(f"- {key:20s}: {len(dict_val[key])} samples")
 
     if config['tasks'].get('predict', False):
-        print('[TEST]')
+        logger.info('[TEST]')
         for key in list_keys:
             if dict_test and dict_test.get(key):
-                print(f"- {key:20s}: {len(dict_test[key])} samples")
+                logger.info(f"- {key:20s}: {len(dict_test[key])} samples")

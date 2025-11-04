@@ -1,6 +1,7 @@
 import os
 import yaml
-
+import logging
+logger = logging.getLogger(__name__)
 
 def load_config(path: str) -> dict:
     """
@@ -37,7 +38,7 @@ def config_recap_1(config: dict) -> None:
     active_tasks = ', '.join([t['name'] for t in config['tasks'] if t['active']])
     device = "cuda" if config.get('use_gpu', False) else "cpu"
 
-    print(f"""
+    logger.info(f"""
 ##############################################
 FLAIR-HUB ZONE DETECTION
 ##############################################
@@ -69,23 +70,23 @@ def config_recap_2(config: dict) -> None:
         width_px = shape['width']
         height_m = height_px * res
         width_m = width_px * res
-        print(f"|→ Image size (px)         : {height_px} (H) × {width_px} (W)")
-        print(f"|→ Image size (meters)     : {fmt(height_m, 2)} m (H) × {fmt(width_m, 2)} m (W)")
+        logger.info(f"|→ Image size (px)         : {height_px} (H) × {width_px} (W)")
+        logger.info(f"|→ Image size (meters)     : {fmt(height_m, 2)} m (H) × {fmt(width_m, 2)} m (W)")
 
-    print(f"|→ Reference resolution    : {fmt(res)} m/px")
-    print(f"|→ Output resolution       : {fmt(config['output_px_meters'])} m/px\n")
+    logger.info(f"|→ Reference resolution    : {fmt(res)} m/px")
+    logger.info(f"|→ Output resolution       : {fmt(config['output_px_meters'])} m/px\n")
 
     patch_px = config['img_pixels_detection']
     patch_m = patch_px * res
     margin_px = config['margin']
     margin_m = margin_px * res
 
-    print(f"|→ Patch size              : {patch_px} px → {fmt(patch_m, 2)} m")
-    print(f"|→ Margin size             : {margin_px} px → {fmt(margin_m, 2)} m")
-    print("|→ Modalities resolution   :")
+    logger.info(f"|→ Patch size              : {patch_px} px → {fmt(patch_m, 2)} m")
+    logger.info(f"|→ Margin size             : {margin_px} px → {fmt(margin_m, 2)} m")
+    logger.info("|→ Modalities resolution   :")
     for mod, r in config['modality_resolutions'].items():
-        print(f"   - {mod:15}: {fmt(r)} m/px")
+        logger.info(f"   - {mod:15}: {fmt(r)} m/px")
 
-    print("=" * 46 + "\n")
+    logger.info("=" * 46 + "\n")
 
 

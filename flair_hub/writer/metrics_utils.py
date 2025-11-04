@@ -11,7 +11,8 @@ from flair_hub.writer.metrics_core import (
                                             class_recall,
                                             class_fscore
 )
-
+import logging
+logger = logging.getLogger(__name__)
 
 def compute_and_save_metrics(
     confmat: np.ndarray,
@@ -98,19 +99,19 @@ def compute_and_save_metrics(
     with open(out_folder_metrics / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
-    print(f"\nTask: {task} - Global Metrics:")
-    print("-" * (90 + 15 * len(active_modalities)))
+    logger.info(f"\nTask: {task} - Global Metrics:")
+    logger.info("-" * (90 + 15 * len(active_modalities)))
     for name, value in zip(metrics["Avg_metrics_name"], metrics["Avg_metrics"]):
-        print(f"{name:<20s} {value:<.4f}")
-    print("-" * (90 + 15 * len(active_modalities)) + "\n")
+        logger.info(f"{name:<20s} {value:<.4f}")
+    logger.info("-" * (90 + 15 * len(active_modalities)) + "\n")
 
     header = "{:<6} {:<25} {:<10} {:<10} {:<10} {:<10} {:<15}".format(
         "Idx", "Class", "IoU", "F-score", "Precision", "Recall", "w.TASK"
     )
     for mod in active_modalities:
         header += f" {'w.' + mod:<15}"
-    print(header)
-    print("-" * (90 + 15 * len(active_modalities)))
+    logger.info(header)
+    logger.info("-" * (90 + 15 * len(active_modalities)))
 
     for i, class_name in enumerate(class_names_cleaned):
         row = "{:<6} {:<25} {:<10.4f} {:<10.4f} {:<10.4f} {:<10.4f} {:<15}".format(
@@ -121,14 +122,14 @@ def compute_and_save_metrics(
         )
         for mod in active_modalities:
             row += f" {modality_weights_cleaned[mod][i]:<15}"
-        print(row)
-    print("\n")
+        logger.info(row)
+    logger.info("\n")
 
     unused_indices = np.where(weights_array == 0)[0]
     if len(unused_indices) > 0:
-        print("0-weighted classes for task")
-        print("-" * 35)
+        logger.info("0-weighted classes for task")
+        logger.info("-" * 35)
         for idx in unused_indices:
             class_label = class_names[idx]
-            print(f"{idx:<6} {class_label}")
-        print("\n")
+            logger.info(f"{idx:<6} {class_label}")
+        logger.info("\n")

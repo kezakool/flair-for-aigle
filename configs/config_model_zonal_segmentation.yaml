@@ -6,18 +6,18 @@ output_name: test_zonal
 
 write_dataframe: False
 output_type: argmax  # [argmax / class_prob]
-cog_conversion: True
+cog_conversion: False
 
 # ======================
 # Model & Inference
 # ======================
 model_weights: /app/runs/flair/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
 use_gpu: True
-batch_size: 1
-num_worker: 2 # 0 on Windows OS
+batch_size: 16
+num_worker: 4 # 0 on Windows OS
 
 img_pixels_detection: 512
-margin: 0
+margin: 40
 output_px_meters: 0.2
 
 # ======================
@@ -41,7 +41,7 @@ modalities:
       SENTINEL1-DESC_TS : False
 
   AERIAL_RGBI:
-      input_img_path: /app/data/datasets/external/FLAIR-HUB_TOY/D006-2020_AERIAL_RGBI/FF-S1-14/D006-2020_AERIAL_RGBI_FF-S1-14_5-5.tif
+      input_img_path: /app/data/aigle_aerial_yolov_2022_martinique_97225_v1.1/sources-raw/972-2022-0690-1630-U20N-0M20-E080.jp2
       channels: [1, 2, 3]
       normalization:
         type: custom

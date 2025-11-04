@@ -1,6 +1,7 @@
 version: "3.11"
 services:
   flair-for-aigle:
+    shm_size: 16g
     build:
       context: .
       dockerfile: .Dockerfile
@@ -8,11 +9,11 @@ services:
       - .env
     volumes:
       - type: bind
-        source: ${DATA_FOLDER}
-        target: ${DOCKER_DATA_FOLDER}
+        source: ${DOCKER_DATA_FOLDER}
+        target: ${DATA_FOLDER}
       - type: bind
-        source: ${LOGS_FOLDER}
-        target: ${DOCKER_LOGS_FOLDER}
+        source: ${DOCKER_RUN_FOLDER}
+        target: ${RUN_FOLDER}
       - type: bind
         source: .
         target: /app/flair-for-aigle
