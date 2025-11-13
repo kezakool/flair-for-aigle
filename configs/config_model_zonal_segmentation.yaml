@@ -13,7 +13,7 @@ cog_conversion: False
 # ======================
 model_weights: /app/runs/flair/FLAIR-HUB_LC-A_RGB_swinbase-upernet.safetensors
 use_gpu: True
-batch_size: 16
+batch_size: 8
 num_worker: 4 # 0 on Windows OS
 
 img_pixels_detection: 512

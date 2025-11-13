@@ -1,9 +1,10 @@
 import logging
-import sys
+import random
 import time
 import rasterio
 import pandas as pd
 import geopandas as gpd
+from shapely.ops import unary_union
 from dotenv import load_dotenv
 import os
 from tqdm import tqdm
@@ -11,6 +12,8 @@ from flair_zonal_detection.inference import *
 from utils.utils import generate_timestamp
 from utils.logs import configure_logging, update_progress
 from utils.s3 import *
+from utils.export import Exporter
+from utils.map import Mapper
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +84,15 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     logger.info(f"[✓] Loaded model and checkpoint in {time.time() - start_model:.2f}s")
     global_results = []
     # for each raster file build patchs :
-    for i, source_image_path in tqdm(enumerate(glob.glob(images_folders+'/*.jp2')[1:6])):
-        # filter on geozone
+    for i, source_image_path in tqdm(enumerate(glob.glob(images_folders+'/*.jp2'))):
+        
+        raster_results_filepath = os.path.join(result_folder, source_image_path.rsplit('/',1)[-1].replace(".jp2",".gpkg"))
+        
+        # check if already run
+        if os.path.exists(raster_results_filepath):
+            logging.warning(f"intermediate result found : {raster_results_filepath} - raster skipped : {source_image_path.rsplit('/',1)[-1]}")
+            continue
+        
         # run flair zonal inference
         start_slice = time.time()
         
@@ -105,29 +115,77 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
               
             inference_and_write(model, dataloader, tiles_gdf, model_config_args, output_files, ref_img)
             
-            gdf_results = raster_to_polygons(output_files)
+            gdf_results = raster_to_polygons(output_files,n_jobs=4)
             
             if len(gdf_results) >0 :
-                raster_results_filepath = os.path.join(work_folder, source_image_path.rsplit('/',1)[-1].replace(".jp2",".gpkg"))
-                gdf_results.to_file(source_image_path.replace(".jp2",".gpkg"), driver="GPKG")
+
+                gdf_results.to_file(raster_results_filepath, driver="GPKG")
                 global_results.append(raster_results_filepath)
                 
             logger.info(f"[✓] Inference completed in {time.time() - start_infer:.2f}s")
 
-    
-    #postpro_outputs(temp_paths, model_config_args)
-    
     logger.info(f"\n[✓] Total time: {time.time() - start_total:.2f}s")
-    logger.info(f"\n[✓] Inference complete. Rasters written to: {list(work_folder.values())}\n")
+    logger.info(f"\n[✓] Inference complete. Rasters written to: {work_folder}\n")
 
     # aggregate all inference
-    gdf_results_list = [gpd.read_file(file) for file in global_results]
+    gdf_results_list = [gpd.read_file(os.path.join(result_folder, file)) for file in os.listdir(result_folder) if file.endswith('.gpkg')]
     global_results_gdf = pd.concat(gdf_results_list, ignore_index=True)
     
-    # export results to aigle
-        # convert to aigle crs
+    def postprocess_results(global_results_gdf, target_crs, geozone_geometry_contours):
+        """
+            postprocessing rules to :
+            - filter on geozone contour
+            - filter classes, 
+            - filter object size and 
+            - simplify topos
+            - convert to target crs
+        """
+        #  filter on contour, if partially included, then reduce the geometry to inside of the zone
+        contour_union = unary_union(geozone_geometry_contours)
+        
+        # Keep only geometries that intersect the contour
+        global_results_gdf = global_results_gdf[global_results_gdf.geometry.intersects(contour_union)]
+
+        # Clip geometries to the contour (only the part inside remains)
+        global_results_gdf.loc[:, "geometry"] = global_results_gdf.geometry.intersection(contour_union)
+
         # filter classes
-        # push results on s3 and postgreql
+        clean_results_gdf = global_results_gdf[global_results_gdf.class_id==6]
+              
+        # simplify geoms .simplify(simplification, preserve_topology=True)
+        clean_results_gdf.loc[:,'geometry'] = clean_results_gdf['geometry'].apply(lambda x : x.simplify(tolerance = 1, preserve_topology=True))
+        
+        # if area is < 50m² remove
+        clean_results_gdf = clean_results_gdf[clean_results_gdf.geometry.area > 20]
+        
+        # TODO improv : calculate the avg confidence of each segmented shape
+        clean_results_gdf['confidence'] = [random.uniform(0, 1) for x in range(len(clean_results_gdf))]
+        
+        clean_results_gdf = clean_results_gdf.to_crs(target_crs)
+        
+        return clean_results_gdf
+    # postprocess results
+    clean_results_gdf = postprocess_results(global_results_gdf, run_config_args.target_crs, geozone_geometry_contour)
+        
+    # Set up exporter and mapper
+    description = 'debug_mode' if debug_mode else image_set_name
+    export_context = {
+        'batch_name': image_set_name,
+        'model_id': model_id,
+        'export_sql': False,
+        'description': description,
+        'add_bd_topo': False,
+    }
+
+    mapper = Mapper(model_config_args['tasks'][0]['class_names'], export_context['batch_name'])
+    exporter = Exporter(input_crs)
+    
+    # Export results
+    exporter.export_to_aigle(clean_results_gdf, target_crs, result_folder, mapper, export_context)
+    logger.info("Prediction process complete.")
+    update_progress(100, 'exporting')
+    s3_runs_path = 's3://'+ s3_bucket_name +'/' + s3_run_folder_path
+    upload_run_traces_to_s3(s3_runs_path,experiment_run_folder,image_set_name)
         
 
 

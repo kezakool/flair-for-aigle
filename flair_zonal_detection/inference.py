@@ -17,6 +17,7 @@ from rasterio.transform import rowcol
 from shapely.geometry import shape
 from rasterio.transform import from_origin
 from scipy.ndimage import zoom
+from multiprocessing import Pool, cpu_count
 from flair_zonal_detection.config import (
                                             load_config,
                                             validate_config,
@@ -350,7 +351,63 @@ def inference_and_write(
 
 
 
+def _extract_polygons_for_class(args):
+    """Worker function to extract polygons for a given class."""
+    cls, data, transform, min_area, simplification = args
+    mask = data == cls
+    if not np.any(mask):
+        return []
+
+    local_polygons = []
+    for geom, value in shapes(mask.astype(np.uint8), mask=mask, transform=transform):
+        poly = shape(geom)
+        if poly.is_empty or poly.area < min_area:
+            continue
+        if simplification > 0:
+            poly = poly.simplify(simplification, preserve_topology=True)
+        local_polygons.append({"class_id": int(cls), "geometry": poly})
+
+    return local_polygons
+
 def raster_to_polygons(
+    tiff_path: str,
+    ignore_background: bool = True,
+    background_value: int = 18,
+    min_area: float = 1.0,
+    simplification: float = 0.1,
+    n_jobs: int = None,
+) -> gpd.GeoDataFrame:
+    """
+    Parallel extraction of vector polygons from a raster TIFF
+    where integer values represent classes.
+    """
+
+    # --- Load raster ---
+    with rasterio.open(tiff_path['AERIAL_LABEL-COSIA'].name) as src:
+        data = src.read(1)
+        transform = src.transform
+        crs = src.crs
+
+    classes = np.unique(data)
+    if ignore_background:
+        classes = classes[classes != background_value]
+
+    if n_jobs is None:
+        n_jobs = max(1, cpu_count() - 1)
+
+    # --- Parallel process ---
+    args = [(cls, data, transform, min_area, simplification) for cls in classes]
+
+    polygons = []
+    with Pool(processes=n_jobs) as pool:
+        for result in tqdm(pool.imap_unordered(_extract_polygons_for_class, args),
+                           total=len(args), desc="Extracting polygons"):
+            polygons.extend(result)
+
+    gdf = gpd.GeoDataFrame(polygons, crs=crs)
+    return gdf
+
+def raster_to_polygons_old(
     tiff_path: str,
     ignore_background: bool = True,
     background_value: int = 18,
