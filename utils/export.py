@@ -119,8 +119,8 @@ class Exporter(object):
         self.gdf_detections['geometry'] = self.gdf_detections['geometry'].apply(lambda x : loads(x.split(';')[1]))
         self.gdf_detections = self.gdf_detections.set_geometry("geometry")
         self.gdf_detections = self.gdf_detections.set_crs(self.target_export_crs)
-        gpkg_file_name = "batch_detections_" + export_context['batch_name'] + '.gpkg'
+        gpkg_file_name = "batch_segmentations_" + export_context['batch_name'] + '.gpkg'
         exp_file = os.path.join(output_folder,gpkg_file_name)
         self.gdf_detections.to_file(exp_file, driver="GPKG")
-        logger.info(f"batch detections saved to : {exp_file}")   
+        logger.info(f"batch segmentation saved to : {exp_file}")   
 

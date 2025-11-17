@@ -172,7 +172,7 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     export_context = {
         'batch_name': image_set_name,
         'model_id': model_id,
-        'export_sql': False,
+        'export_sql': export_sql,
         'description': description,
         'add_bd_topo': False,
     }
