@@ -188,7 +188,6 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     s3_runs_path = 's3://'+ s3_bucket_name +'/' + s3_run_folder_path
     upload_run_traces_to_s3(s3_runs_path,experiment_run_folder,image_set_name)
         
-
     if not debug_mode:
         # Clean data folder contents but keep the folder
         for item in os.listdir(data_folder):
