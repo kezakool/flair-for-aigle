@@ -70,8 +70,9 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     logger.info("Starting segmentation process...")
     start_total = time.time()
     model_config_path = "configs/config_model_zonal_segmentation.yaml"
+    
     # load aigle segmentation config: config is based on flair config + has geozone info + export infos
-    model_config_args = prep_config(model_config_path, model_ckpt_path, model_threshold_filepath, result_folder, log_folder)
+    model_config_args = prep_config(model_config_path, model_ckpt_path, model_threshold_filepath, result_folder, log_folder, images_folders)
     
     # load geozone contour and convert it to same crs as input images
     geozone_geometry_contour = load_geozone_contour(run_config_args)
@@ -188,4 +189,12 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     upload_run_traces_to_s3(s3_runs_path,experiment_run_folder,image_set_name)
         
 
-
+    if not debug_mode:
+        # Clean data folder contents but keep the folder
+        for item in os.listdir(data_folder):
+            item_path = os.path.join(data_folder, item)
+            if os.path.isfile(item_path) or os.path.islink(item_path):
+                os.unlink(item_path)  # remove file or symlink
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)  # remove subdirectory
+        logger.info(f"data folder cleaned (contents removed): {data_folder}")

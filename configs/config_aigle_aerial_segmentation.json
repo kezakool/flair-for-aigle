@@ -1,9 +1,9 @@
 {
     "process": "run_fast_best_segmentations",
     "images_folders": "/app/data/images/2020/aerial/indre/raw-img",
-    "testset_name": "2020_meziere-en-brenne_36123",
+    "testset_name": "2020_chalais_36036",
     "version": "v1.1",
-    "geozones_codes": "36123",
+    "geozones_codes": "36036",
     "classes": [],
     "images_type": "aerial",
     "dataset_type": "yolov",

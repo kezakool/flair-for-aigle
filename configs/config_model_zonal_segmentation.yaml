@@ -41,7 +41,7 @@ modalities:
       SENTINEL1-DESC_TS : False
 
   AERIAL_RGBI:
-      input_img_path: /app/data/aigle_aerial_yolov_2022_martinique_97225_v1.1/sources-raw/972-2022-0690-1630-U20N-0M20-E080.jp2
+      input_img_path: /path/to/input_image.tif
       channels: [1, 2, 3]
       normalization:
         type: custom
