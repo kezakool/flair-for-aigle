@@ -15,6 +15,7 @@
     "s3_db_topo_archive_source_file": "aigle-raw-datas/bd_topo/2020/BDTOPO_3-0_TOUSTHEMES_SHP_LAMB93_D036_2020-06-15.7z",
     "s3_run_folder_path": "aigle-runs",
     "model_id": 7,
+    "model_config": "/app/flair-for-aigle/configs/config_model_zonal_segmentation.yaml",
     "export_gpkg": true,
     "export_sql": true,
     "add_bd_topo": true,

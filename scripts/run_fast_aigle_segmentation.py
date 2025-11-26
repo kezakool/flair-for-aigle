@@ -43,6 +43,7 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     s3_db_topo_archive_source_file = run_config_args.s3_db_topo_archive_source_file
     s3_run_folder_path = run_config_args.s3_run_folder_path 
     model_id = run_config_args.model_id
+    model_config_path = run_config_args.model_config 
     version = run_config_args.testset_name + '_' + run_config_args.version
     image_set_name = f"aigle_{images_type}_{dataset_type}_{version}"
     
@@ -69,7 +70,6 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     
     logger.info("Starting segmentation process...")
     start_total = time.time()
-    model_config_path = "configs/config_model_zonal_segmentation.yaml"
     
     # load aigle segmentation config: config is based on flair config + has geozone info + export infos
     model_config_args = prep_config(model_config_path, model_ckpt_path, model_threshold_filepath, result_folder, log_folder, images_folders)

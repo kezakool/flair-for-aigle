@@ -34,6 +34,17 @@
             "args": ["--config",
             "/app/flair-for-aigle/configs/config_aigle_aerial_segmentation.json"
         ]
+        },
+        {
+            "name": "run aigle segmentation s3 config",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/app/flair-for-aigle/main.py",
+            "console": "integratedTerminal",
+            "args": ["--config",
+            "s3://aigle-storage/aigle-runs/airflow-run-infos/2511251420_run_301/s3_config_aerial_segmentation_run_301.json"
+        ]
         }
     ]
 }
+
