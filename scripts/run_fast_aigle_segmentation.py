@@ -115,12 +115,22 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
               
             inference_and_write(model, dataloader, tiles_gdf, model_config_args, output_files, ref_img)
             
-            gdf_results = raster_to_polygons(output_files,n_jobs=4)
+            segmentation_pipeline = 'water'
+            if segmentation_pipeline == 'water':
+                gdf_results = raster_to_polygons(output_files,n_jobs=4)
+                if len(gdf_results) >0 :
+                    gdf_results.to_file(raster_results_filepath, driver="GPKG")
+                    global_results.append(raster_results_filepath)
+                    
+            elif segmentation_pipeline == 'bush':
+                # load segmented tif
+                # load dol zones on area
+                # preprocess feature eng
+                # infer for each
+                
+                None
             
-            if len(gdf_results) >0 :
 
-                gdf_results.to_file(raster_results_filepath, driver="GPKG")
-                global_results.append(raster_results_filepath)
                 
             logger.info(f"[✓] Inference completed in {time.time() - start_infer:.2f}s")
 
@@ -150,16 +160,16 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
         global_results_gdf.loc[:, "geometry"] = global_results_gdf.geometry.intersection(contour_union)
 
         # filter classes
-        clean_results_gdf = global_results_gdf[global_results_gdf.class_id==6]
+        clean_results_gdf = global_results_gdf[global_results_gdf.class_id.isin([8,9,10,11,12,13,14])]
               
         # simplify geoms .simplify(simplification, preserve_topology=True)
         clean_results_gdf.loc[:,'geometry'] = clean_results_gdf['geometry'].apply(lambda x : x.simplify(tolerance = 1, preserve_topology=True))
         
-        # if area is < 50m² remove
+        # if area is < 20m² remove
         clean_results_gdf = clean_results_gdf[clean_results_gdf.geometry.area > 20]
         
         # TODO improv : calculate the avg confidence of each segmented shape
-        clean_results_gdf['confidence'] = [random.uniform(0, 1) for x in range(len(clean_results_gdf))]
+        clean_results_gdf['confidence'] = [random.uniform(0.3, 1) for x in range(len(clean_results_gdf))]
         
         clean_results_gdf = clean_results_gdf.to_crs(target_crs)
         

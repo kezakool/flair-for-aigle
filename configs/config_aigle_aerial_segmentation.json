@@ -1,9 +1,9 @@
 {
     "process": "run_fast_best_segmentations",
-    "images_folders": "/app/data/images/2020/aerial/indre/raw-img",
-    "testset_name": "2020_meziere-en-brenne_36123",
+    "images_folders": "/app/data/images/2024/aerial/herault/raw-img",
+    "testset_name": "2024_puisserguier_34225",
     "version": "v1.1",
-    "geozones_codes": "36123",
+    "geozones_codes": "34225",
     "classes": [],
     "images_type": "aerial",
     "dataset_type": "yolov",
@@ -11,8 +11,8 @@
     "target_pixel_size_m": 0.2,
     "tile_size_px": 512,
     "s3_bucket_name": "aigle-storage",
-    "s3_aerial_archive_source_folder": "aigle-raw-datas/aerial-datas/2020/indre/",
-    "s3_db_topo_archive_source_file": "aigle-raw-datas/bd_topo/2020/BDTOPO_3-0_TOUSTHEMES_SHP_LAMB93_D036_2020-06-15.7z",
+    "s3_aerial_archive_source_folder": "aigle-raw-datas/aerial-datas/2024/herault/",
+    "s3_db_topo_archive_source_file": "aigle-raw-datas/bd_topo/2024/BDTOPO_3-4_TOUSTHEMES_SHP_LAMB93_D034_2024-03-15.7z",
     "s3_run_folder_path": "aigle-runs",
     "model_id": 7,
     "export_gpkg": true,
@@ -24,5 +24,5 @@
     "start_raster_index_df_results_path":"",
     "start_raster_index_df_infos_path":"",
     "run_progression_filepath": "",
-    "run_id": "999"
+    "run_id": "local"
 }

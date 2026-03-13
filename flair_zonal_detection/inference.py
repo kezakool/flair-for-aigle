@@ -169,7 +169,7 @@ def init_outputs(config: Dict, ref_img: DatasetReader, i) -> Tuple[Dict[str, Dat
         suffix = 'argmax' if output_type == 'argmax' else 'class-prob'
         out_path = os.path.join(
             config['output_path'],
-            f"{config['output_name']}_{task['name']}_{suffix}_i.tif"
+            f"{config['output_name']}_{task['name']}_{suffix}_{i}.tif"
         )
 
         if not needs_rescale:

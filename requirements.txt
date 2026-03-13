@@ -22,3 +22,5 @@ py7zr==0.22.0
 SQLAlchemy==2.0.25
 psycopg2==2.9.2
 geoalchemy2==0.16.0
+ipykernel
+odfpy==1.4.1
