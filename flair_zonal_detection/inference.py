@@ -6,6 +6,7 @@ import time
 import geopandas as gpd
 import numpy as np
 import logging
+import glob
 from itertools import islice
 from typing import Dict, Tuple
 from tqdm import tqdm
@@ -50,14 +51,18 @@ def overwrite_config(config: str, model_ckpt_path: str, model_threshold_filepath
     return config
     
 
-def prep_config(config_path: str, model_ckpt_path: str, model_threshold_filepath: str, result_folder: str, log_folder: str) -> Dict:
+def prep_config(config_path: str, model_ckpt_path: str, model_threshold_filepath: str, result_folder: str, log_folder: str, images_folder: str) -> Dict:
     """
     Load and validate configuration, initialize logging and device.
     """
     config = load_config(config_path)
     
-    config = overwrite_config(config, model_ckpt_path, model_threshold_filepath, result_folder, log_folder)
+    list_images_rasters = glob.glob(images_folder+'/*.jp2')
+    init_rgbi_image_path = os.path.join(images_folder,list_images_rasters[0])
+    config['modalities']['AERIAL_RGBI']['input_img_path'] = init_rgbi_image_path
     
+    config = overwrite_config(config, model_ckpt_path, model_threshold_filepath, result_folder, log_folder)
+
     validate_config(config)
     config_recap_1(config)
     config = initialize_geometry_and_resolutions(config)

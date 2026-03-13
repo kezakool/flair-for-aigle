@@ -25,7 +25,7 @@ RUN pip install --upgrade pip
 RUN pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu126
 
 # Install project dependencies
-#RUN pip install -r /app/flair-for-aigle/requirements.txt
+# RUN pip install -r /app/flair-for-aigle/requirements.txt
 
 # Expose port if needed (e.g., tensorboard)
 EXPOSE 6006
