@@ -343,7 +343,7 @@ def debug_geometries_with_a_tiffprint(src_path, building_geom, geometry, zones, 
             with rasterio.open(debug_path, "w", **profile) as dst:
                 dst.write(debug_raster, 1)
 
-def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=None, sample_id=None,  debug=False):
+def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=None, gdf_u_zones=None, sample_id=None,  debug=False):
     """
 
     """
@@ -421,6 +421,9 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
 
     df_wide = df_wide.reset_index()
 
+    df_wide['surf_area'] = df_wide.geometry.area
+
+
     if building_geom.area > 10 :
         df_wide['has_building'] = [1]
     else:
@@ -452,6 +455,17 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
     else: 
         df_wide['has_contact_river_zone'] = [1]
 
+    # Spatial feature on intersections with u zones 
+    buffered_for_u = geometry.buffer(0)
+    
+    candidates = gdf_u_zones[gdf_u_zones.intersects(buffered_for_u)]
+    
+    if len(candidates)==0:
+        df_wide['has_contact_u_zone'] = [0]
+    else: 
+        df_wide['has_contact_u_zone'] = [1]
+
+
     return df_wide
 
 def postprocess_pred_control(test_gdf: gpd.GeoDataFrame, x_test_business_features: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -478,6 +492,44 @@ def postprocess_pred_control(test_gdf: gpd.GeoDataFrame, x_test_business_feature
     )
     gdf.loc[mask_forest, "pred_control_pp"] = 0
 
+    # Rule 3: remove if is smaller than 200m²
+    mask_small_zone = (
+        (gdf["pred_control_pp"] == 1) &
+        (gdf.geometry.area < 200)
+    )
+    gdf.loc[mask_small_zone, "pred_control_pp"] = 0
+
+    # Rule 4 : set all u_zone_old to 0 except if it has contact with forest and has a neighbourg positive to control
+    # TODO : missing info on "set all u_zone_old to 0 except"
+    
+    #build flag rule
+    gdf_buffer = gdf.copy()
+    gdf_buffer["geometry"] = gdf.geometry.buffer(2)
+
+    joined = gpd.sjoin(
+        gdf_buffer,
+        gdf[["geometry", "pred_control_pp"]],
+        how="left",
+        predicate="intersects"
+    )
+
+    joined = joined[joined.index != joined.index_right]
+
+    neighbor_flag = (
+        joined.groupby(joined.index)["pred_control_pp"]
+        .apply(lambda x: (x == 1).any())
+    )
+
+    gdf["has_rule_u_zone"] = (
+        gdf["has_contact_forest_zone"] &
+        gdf.index.map(neighbor_flag).fillna(False)
+    ).astype(int)
+    
+    # apply rule
+    mask_u_zone= (gdf["has_rule_u_zone"] == 1)
+    gdf.loc[mask_u_zone, "pred_control_pp"] = 1
+
+    
     return gdf
 
                  
@@ -524,25 +576,7 @@ def find_best_threshold(y_true, y_proba, metric="f1", n_steps=100):
 
     return best_threshold, best_score
 
-class GeoRasterFeatureDataset:
-    def __init__(self, gdf, raster_crs):
-        self.gdf = gdf.reset_index(drop=True)
-        self.gdf.to_crs(raster_crs, inplace=True)
-
-    def __len__(self):
-        return len(self.gdf)
-
-    def __getitem__(self, idx):
-        row = self.gdf.iloc[idx]
-        x = extract_features(row.image_path, row.geometry, sample_id=idx)
-        if x is None:
-            raise IndexError(f"Invalid features at index {idx}")
-
-        y = row.target_control
-        return x, y
-
-
-def get_or_build_xy(set_gdf, set_name, gdf_forests, gdf_waters, cache_dir: str = None, debug=True):
+def get_or_build_xy(set_gdf, set_name, gdf_forests, gdf_waters, gdf_u_zones, cache_dir: str = None, debug=True):
     df_features_list = []
     if debug:
         set_gdf = set_gdf[:min(10,len(set_gdf))]
@@ -550,7 +584,7 @@ def get_or_build_xy(set_gdf, set_name, gdf_forests, gdf_waters, cache_dir: str =
     cache_filename = os.path.join(cache_dir, set_name + '.parquet')
     if not os.path.exists(cache_filename):
         for row in set_gdf.iterrows():
-            df_feature_row = extract_features(row[1].image_path, row[1].geometry, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters, sample_id=row[0],debug=debug)
+            df_feature_row = extract_features(row[1].image_path, row[1].geometry, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters , gdf_u_zones=gdf_u_zones, sample_id=row[0],debug=debug)
             df_feature_row['target_control'] = row[1].target_control
             df_features_list.append(df_feature_row)
             
@@ -563,7 +597,7 @@ def get_or_build_xy(set_gdf, set_name, gdf_forests, gdf_waters, cache_dir: str =
     
     return x, y
 
-def preprocess_features(set_gdf, gdf_forests, gdf_waters, cache_dir: str = None, debug=True):
+def preprocess_features(set_gdf, gdf_forests, gdf_waters, gdf_u_zones, cache_dir: str = None, debug=True):
     df_features_list = []
 
     if debug:
@@ -574,7 +608,7 @@ def preprocess_features(set_gdf, gdf_forests, gdf_waters, cache_dir: str = None,
 
         for row in set_gdf.iterrows():
             
-            df_feature_row = extract_features(row[1].image_path, row[1].geom, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters, sample_id=row[0],debug=debug)
+            df_feature_row = extract_features(row[1].image_path, row[1].geom, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters, gdf_u_zones=gdf_u_zones, sample_id=row[0],debug=debug)
             df_features_list.append(df_feature_row)
             
         df_set = pd.concat(df_features_list)
@@ -582,7 +616,7 @@ def preprocess_features(set_gdf, gdf_forests, gdf_waters, cache_dir: str = None,
     else :
         df_set = pd.read_parquet(cache_filename)
     
-    x_train_business_features = df_set[['has_contact_river_zone','has_contact_forest_zone','has_inhabited_building','has_building']]
+    x_train_business_features = df_set[['has_contact_river_zone','has_contact_forest_zone','has_contact_u_zone','has_inhabited_building','has_building']]
     x_train_ml_features = df_set.drop(columns=['has_contact_river_zone','has_contact_forest_zone','sample_id'])
     
     return x_train_ml_features, x_train_business_features
