@@ -161,7 +161,6 @@ def compute_stats(data, pixel_area):
         "mean": valid.mean()/255,
         #"low_decile_mean": low_decile_mean/255,
         #"high_decile_mean": high_decile_mean/255,
-
         # normalized continuous surfaces
         "surf_gt_100_ratio": surf_gt_100 / total_surface,
         "surf_gt_200_ratio": surf_gt_200 / total_surface,
@@ -347,7 +346,7 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
     """
 
     """
-
+    #print(f" test 2 : {geometry.area}")
     building_geom = extract_building_zone(src_path, geometry)
 
     zones = build_zones(building_geom, geometry)
@@ -421,8 +420,7 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
 
     df_wide = df_wide.reset_index()
 
-    df_wide['surf_area'] = df_wide.geometry.area
-
+    df_wide['surf_area'] = geometry.area
 
     if building_geom.area > 10 :
         df_wide['has_building'] = [1]
@@ -454,6 +452,9 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
         df_wide['has_contact_river_zone'] = [0]
     else: 
         df_wide['has_contact_river_zone'] = [1]
+
+    if sample_id in [26591.0, 26883.0]:
+        print("debug")
 
     # Spatial feature on intersections with u zones 
     buffered_for_u = geometry.buffer(0)
@@ -500,36 +501,40 @@ def postprocess_pred_control(test_gdf: gpd.GeoDataFrame, x_test_business_feature
     gdf.loc[mask_small_zone, "pred_control_pp"] = 0
 
     # Rule 4 : set all u_zone_old to 0 except if it has contact with forest and has a neighbourg positive to control
-    # TODO : missing info on "set all u_zone_old to 0 except"
-    
+
     #build flag rule
+    '''
     gdf_buffer = gdf.copy()
     gdf_buffer["geometry"] = gdf.geometry.buffer(2)
-
+    right = gdf[["geometry", "pred_control_pp"]].rename(
+        columns={"pred_control_pp": "neighbor_pred"}
+    )
     joined = gpd.sjoin(
         gdf_buffer,
-        gdf[["geometry", "pred_control_pp"]],
+        right,
         how="left",
         predicate="intersects"
     )
 
-    joined = joined[joined.index != joined.index_right]
+    joined = joined[joined.index != joined["index_right"]]
 
     neighbor_flag = (
-        joined.groupby(joined.index)["pred_control_pp"]
+        joined.groupby(joined.index)["neighbor_pred"]
         .apply(lambda x: (x == 1).any())
     )
 
-    gdf["has_rule_u_zone"] = (
+    gdf["has_rule_u_zone_positive"] = (
         gdf["has_contact_forest_zone"] &
         gdf.index.map(neighbor_flag).fillna(False)
     ).astype(int)
-    
-    # apply rule
-    mask_u_zone= (gdf["has_rule_u_zone"] == 1)
-    gdf.loc[mask_u_zone, "pred_control_pp"] = 1
 
-    
+    # apply rule
+    mask_u_zone_to_0= ((gdf["has_contact_u_zone"] == 1) & (gdf["has_rule_u_zone_positive"] == 0))
+    gdf.loc[mask_u_zone_to_0, "pred_control_pp"] = 0
+    '''
+    # apply simplified rule : urban zone without contact with forest are set to 0
+    mask_u_zone_to_0= ((gdf["has_contact_u_zone"] == 1) & (gdf["has_contact_forest_zone"] == 0))
+    gdf.loc[mask_u_zone_to_0, "pred_control_pp"] = 0
     return gdf
 
                  
@@ -584,16 +589,17 @@ def get_or_build_xy(set_gdf, set_name, gdf_forests, gdf_waters, gdf_u_zones, cac
     cache_filename = os.path.join(cache_dir, set_name + '.parquet')
     if not os.path.exists(cache_filename):
         for row in set_gdf.iterrows():
+            #print(f" test 1 : {row[1].geometry}")
             df_feature_row = extract_features(row[1].image_path, row[1].geometry, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters , gdf_u_zones=gdf_u_zones, sample_id=row[0],debug=debug)
-            df_feature_row['target_control'] = row[1].target_control
+            df_feature_row['target_local_control'] = row[1].target_local_control
             df_features_list.append(df_feature_row)
             
         df_set = pd.concat(df_features_list)
         df_set.to_parquet(cache_filename)
     else :
         df_set = pd.read_parquet(cache_filename)
-    y = df_set['target_control']
-    x = df_set.drop(columns=['target_control','sample_id'])
+    y = df_set['target_local_control']
+    x = df_set.drop(columns=['target_local_control','sample_id'])
     
     return x, y
 
@@ -617,6 +623,6 @@ def preprocess_features(set_gdf, gdf_forests, gdf_waters, gdf_u_zones, cache_dir
         df_set = pd.read_parquet(cache_filename)
     
     x_train_business_features = df_set[['has_contact_river_zone','has_contact_forest_zone','has_contact_u_zone','has_inhabited_building','has_building']]
-    x_train_ml_features = df_set.drop(columns=['has_contact_river_zone','has_contact_forest_zone','sample_id'])
+    x_train_ml_features = df_set.drop(columns=['has_contact_river_zone','has_contact_forest_zone','has_contact_u_zone','sample_id'])
     
     return x_train_ml_features, x_train_business_features
