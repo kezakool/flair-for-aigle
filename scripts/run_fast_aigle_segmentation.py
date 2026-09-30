@@ -127,10 +127,6 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
 
     logger.info(f"\n[✓] Total time: {time.time() - start_total:.2f}s")
     logger.info(f"\n[✓] Inference complete. Rasters written to: {work_folder}\n")
-
-    # aggregate all inference
-    gdf_results_list = [gpd.read_file(os.path.join(result_folder, file)) for file in os.listdir(result_folder) if file.endswith('.gpkg')]
-    global_results_gdf = pd.concat(gdf_results_list, ignore_index=True)
     
     def postprocess_results(global_results_gdf, target_crs, geozone_geometry_contours):
         """
@@ -165,8 +161,17 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
         clean_results_gdf = clean_results_gdf.to_crs(target_crs)
         
         return clean_results_gdf
-    # postprocess results
-    clean_results_gdf = postprocess_results(global_results_gdf, run_config_args.target_crs, geozone_geometry_contour)
+   
+    for file in os.listdir(result_folder):
+        if file.endswith('.gpkg'):
+            results_gdf = gpd.read_file(os.path.join(result_folder, file))
+            # postprocess results and overwrite
+            clean_results_gdf = postprocess_results(results_gdf, run_config_args.target_crs, geozone_geometry_contour)
+            clean_results_gdf.to_file(os.path.join(result_folder, file), driver="GPKG")
+    
+     # aggregate all inference
+    gdf_results_list = [gpd.read_file(os.path.join(result_folder, file)) for file in os.listdir(result_folder) if file.endswith('.gpkg')]
+    global_results_gdf = pd.concat(gdf_results_list, ignore_index=True)
         
     # Set up exporter and mapper
     description = 'debug_mode' if debug_mode else image_set_name
@@ -182,7 +187,7 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     exporter = Exporter(input_crs)
     
     # Export results
-    exporter.export_to_aigle(clean_results_gdf, target_crs, result_folder, mapper, export_context)
+    exporter.export_to_aigle(global_results_gdf, target_crs, result_folder, mapper, export_context)
     logger.info("Prediction process complete.")
     update_progress(100, 'exporting')
     s3_runs_path = 's3://'+ s3_bucket_name +'/' + s3_run_folder_path

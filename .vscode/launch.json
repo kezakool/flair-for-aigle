@@ -42,7 +42,7 @@
             "program": "/app/flair-for-aigle/main.py",
             "console": "integratedTerminal",
             "args": ["--config",
-            "s3://aigle-storage/aigle-runs/airflow-run-infos/2511251420_run_301/s3_config_aerial_segmentation_run_301.json"
+            "s3://aigle-storage/aigle-runs/airflow-run-infos/2609300931_run_859/s3_config_aerial_segmentation_run_859.json"
         ]
         }
     ]
