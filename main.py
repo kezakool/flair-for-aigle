@@ -2,8 +2,9 @@ import argparse
 import sys
 import json
 from utils.config import *
-from scripts.run_fast_aigle_segmentation import run_fast_aigle_segmentation
-
+from scripts.run_fast_aigle_segmentation_water import run_fast_aigle_segmentation_water
+from scripts.run_fast_aigle_segmentation_dol_focus import run_fast_aigle_segmentation_dol_focus
+ 
            
 def main():
 
@@ -14,15 +15,14 @@ def main():
     parser.add_argument("--run_id", help="airflow run id link to map between dags, is set in dag", required=False, default='local')
     parser.add_argument("--run_progression_filepath", help="airflow run progression file path to map between dags, is set in dag", required=False)
     
-    # Fix for debug_mode flag
     parser.add_argument("-debug_mode", "--debug_mode", help="Activate debug mode", action='store_true')
     parser.add_argument("-images_type", "--images_type", choices=["pleiade", "aerial", "siatiles"], metavar="[IMAGE_TYPE]", required=False)
     
     parser.add_argument("-annotation_source_type", "--annotation_source_type", help="Annotations source, is from_custom_file or from_aigle_db", required=False)
     parser.add_argument("-model_type", "--model_type", help="Model type to load", required=False)
     parser.add_argument("-model_ckpt", "--model_ckpt", help="Best model loaded for inference on test set, if multiple, is separated with commas", required=False)
-    parser.add_argument("-model_config", "--model_config", help="Model config from mmdetection training", required=False)
-    parser.add_argument("-model_id", "--model_id", help="Model Id from Aigle detection schema", required=False)
+    parser.add_argument("-seg_model_config", "--model_config", help="Model config for segmentation, examples inf configs/", required=False)
+    parser.add_argument("-seg_model_id", "--model_id", help="Model Id from Aigle detection schema", required=False)
     parser.add_argument("-images_folders", "--images_folders", help="Comma-separated list of directories with input images", required=False)
     parser.add_argument("-inference_folder", "--inference_folder", help="inference test set", default=None, required=False)
     parser.add_argument("-datasets_folder", "--datasets_folder", help="Output directory for Aigle experiments", required=False)
@@ -65,6 +65,12 @@ def main():
     parser.add_argument("-s3_aerial_archive_source_folder", "--s3_aerial_archive_source_folder", help="S3 archive images folder", default=None, required=False, type=str)
     parser.add_argument("-s3_db_topo_archive_source_file", "--s3_db_topo_archive_source_file", help="S3 archive topo file", default=None, required=False, type=str)
     parser.add_argument("-s3_run_folder_path", "--s3_run_folder_path", help="S3 folder to store logs and results", default=None, required=False, type=str)
+    # dol s3 sources
+    parser.add_argument("-s3_db_forest_source_file", "--s3_db_forest_source_file", help="S3 storage bucket name", default=None, required=False, type=str)
+    parser.add_argument("-s3_db_waters_source_file", "--s3_db_waters_source_file", help="S3 storage bucket name", default=None, required=False, type=str)
+    parser.add_argument("-s3_db_zone_urba_file", "--s3_db_zone_urba_file", help="S3 storage bucket name", default=None, required=False, type=str)
+    parser.add_argument("-s3_db_dol_source_file", "--s3_db_dol_source_file", help="S3 storage bucket name", default=None, required=False, type=str)  
+    
     
     parser.add_argument("-conv_dataset_input_folder", "--conv_dataset_input_folder", help="Export detections to Aigle db", default=None, required=False)
     parser.add_argument("-conv_dataset_input_type", "--conv_dataset_input_type", help="Export detections to Aigle db", default=None, required=False)
@@ -90,8 +96,10 @@ def main():
 
     # Process selection
     process = combined_args.process
-    if process == "run_fast_best_segmentations":
-        run_fast_aigle_segmentation(combined_args) 
+    if process == "run_fast_aigle_segmentations_water":
+        run_fast_aigle_segmentation_water(combined_args) 
+    elif process == "run_fast_aigle_segmentation_dol_focus":
+        run_fast_aigle_segmentation_dol_focus(combined_args) 
     else:
         print("Unknown process specified.")
         sys.exit(1)

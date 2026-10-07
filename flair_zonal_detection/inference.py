@@ -328,19 +328,59 @@ def inference_and_write(
                 img_height = int(round((image_bounds['top'] - image_bounds['bottom']) / out_res))
                 img_width  = int(round((image_bounds['right'] - image_bounds['left']) / out_res))
 
-                # Clip
-                if top_px + height_px > img_height:
-                    height_px = img_height - top_px
-                if left_px + width_px > img_width:
-                    width_px = img_width - left_px
+                # Get prediction size
+                height_px = prediction.shape[-2]
+                width_px = prediction.shape[-1]
 
-                if height_px <= 0 or width_px <= 0:
-                    logger.info(f"[!] Skipping tile {row['id']} — window out of bounds.")
+                # Output raster dimensions
+                img_height = int(round(
+                    (image_bounds['top'] - image_bounds['bottom']) / out_res
+                ))
+                img_width = int(round(
+                    (image_bounds['right'] - image_bounds['left']) / out_res
+                ))
+
+                # ---------------------------------------------------------
+                # Clip prediction to the valid output raster extent.
+                #
+                # IMPORTANT:
+                # This only handles tiles extending outside the raster.
+                # It does NOT handle overlap priority between tiles.
+                # ---------------------------------------------------------
+
+                # Source coordinates inside prediction
+                src_x0 = max(0, -left_px)
+                src_y0 = max(0, -top_px)
+
+                src_x1 = min(width_px, img_width - left_px)
+                src_y1 = min(height_px, img_height - top_px)
+
+                # Nothing from this prediction falls inside the output raster
+                if src_x0 >= src_x1 or src_y0 >= src_y1:
+                    logger.info(
+                        f"[!] Skipping tile {row['id']} — "
+                        f"outside output raster "
+                        f"(left_px={left_px}, top_px={top_px}, "
+                        f"size={width_px}x{height_px})"
+                    )
                     continue
 
-                # Crop prediction if needed
-                prediction = prediction[..., :height_px, :width_px]
-                window = Window(col_off=left_px, row_off=top_px, width=width_px, height=height_px,)
+                # Crop prediction to the portion that lies inside the raster
+                prediction = prediction[..., src_y0:src_y1, src_x0:src_x1]
+
+                # Destination position inside output raster
+                dst_left = max(0, left_px)
+                dst_top = max(0, top_px)
+
+                width_px = src_x1 - src_x0
+                height_px = src_y1 - src_y0
+
+                window = Window(
+                    col_off=dst_left,
+                    row_off=dst_top,
+                    width=width_px,
+                    height=height_px,
+                )
                 
                 #logger.info(f"Transfering prediction of tile {row['id']} into window {height_px}x{width_px} at position {left_px}-{top_px}")
                 

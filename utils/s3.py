@@ -52,29 +52,27 @@ def prepare_local_model_folder(run_folder,model_id):
         os.mkdir(models_path)
     
     model_path = os.path.join(models_path,str(model_id))
+
     if not os.path.isdir(model_path):
-        if not os.path.isdir(model_path):
-            os.mkdir(model_path)
-        logger.info(f"Downloading model from {model_s3_path} to {model_path}....")
-        process = subprocess.run(["aws","s3","cp",model_s3_path,model_path,"--recursive"] ,check=True,
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE,
-        text=True)
-        # Log stdout
-        if process.stdout:
-            for line in process.stdout.splitlines():
-                logger.info(f"S3 SYNC : {line}")  # Log each line
-        # Log stderr (if any errors/warnings)
-        if process.stderr:
-            for line in process.stderr.splitlines():
-                logger.warning(f"S3 SYNC ERROR : {line}")
-    else:
-            logger.info(f"Ml model config found locally at : {model_path}")  
+        os.mkdir(model_path)
+    logger.info(f"Downloading model from {model_s3_path} to {model_path}....")
+    process = subprocess.run(["aws","s3","cp",model_s3_path,model_path,"--recursive"] ,check=True,
+    stdout=subprocess.PIPE, 
+    stderr=subprocess.PIPE,
+    text=True)
+    # Log stdout
+    if process.stdout:
+        for line in process.stdout.splitlines():
+            logger.info(f"S3 SYNC : {line}")  # Log each line
+    # Log stderr (if any errors/warnings)
+    if process.stderr:
+        for line in process.stderr.splitlines():
+            logger.warning(f"S3 SYNC ERROR : {line}")
 
     # -------------------------------
     # Find model checkpoint file
     # -------------------------------
-    extensions = ["*.pt", "*.ckpt", "*.safetensors"]
+    extensions = ["*.pt", "*.ckpt", "*.safetensors","*.json"]
     model_ckpt_path = None
 
     for ext in extensions:
@@ -85,17 +83,30 @@ def prepare_local_model_folder(run_folder,model_id):
             break
 
     if not model_ckpt_path:
-        logger.error(f"No model checkpoint (.pt/.ckpt/.safetensors) found in {model_path}")
+        logger.error(f"No model checkpoint (.pt/.ckpt/.safetensors/.json) found in {model_path}")
         raise FileNotFoundError(f"No checkpoint file found in {model_path}")
 
     # -------------------------------
-    # Locate threshold configuration file
+    # Locate configurations file
     # -------------------------------
+    
     model_threshold_filepath = os.path.join(model_path, "best_thresholds.yaml")
+    
+    model_metadata_filepath = model_ckpt_path.replace(".json","_metadata.json")
+    
     if not os.path.exists(model_threshold_filepath):
         logger.warning(f"Threshold config file not found at: {model_threshold_filepath}")
+    else:
+        return model_ckpt_path, model_threshold_filepath
+    
+    if not os.path.exists(model_metadata_filepath):
+        logger.warning(f"Metadata file not found at: {model_metadata_filepath}")
+    else:
+        return model_ckpt_path, model_metadata_filepath
+    
+    return model_ckpt_path, None
 
-    return model_ckpt_path, model_threshold_filepath
+    
 
 
 def prepare_run_folder(experiment_run_folder, progression_file_path):
@@ -133,17 +144,17 @@ def prepare_run_folder(experiment_run_folder, progression_file_path):
     
 def prepare_local_data_folder(bucket_name, aerial_archive_source_folder, db_topo_archive_source_file, experiment_data_folder, add_building_db_topo, use_remove_db_topo):
     """
-    Prepares the local data folder by downloading and extracting necessary data from S3.
+        Prepares the local data folder by downloading and extracting necessary data from S3.
 
-    Parameters:
-    - bucket_name (str): The name of the S3 bucket.
-    - aerial_archive_source_folder (str): The source folder in the S3 bucket for aerial images.
-    - db_topo_archive_source_file (str): The source file in the S3 bucket for DB topo data.
-    - experiment_data_folder (str): The local folder where the experiment data will be stored.
-    - add_building_db_topo (bool): Flag to indicate whether to add BD topo building data.
-    - use_remove_db_topo (bool): Flag to indicate whether to use remove BD topo data (roads).
-    Returns:
-    - tuple: A tuple containing the path to the source folder and the path to the BD topo files.
+        Parameters:
+        - bucket_name (str): The name of the S3 bucket.
+        - aerial_archive_source_folder (str): The source folder in the S3 bucket for aerial images.
+        - db_topo_archive_source_file (str): The source file in the S3 bucket for DB topo data.
+        - experiment_data_folder (str): The local folder where the experiment data will be stored.
+        - add_building_db_topo (bool): Flag to indicate whether to add BD topo building data.
+        - use_remove_db_topo (bool): Flag to indicate whether to use remove BD topo data (roads).
+        Returns:
+        - tuple: A tuple containing the path to the source folder and the path to the BD topo files.
     """
     
     session = boto3.session.Session(profile_name='default')
@@ -228,6 +239,46 @@ def prepare_local_data_folder(bucket_name, aerial_archive_source_folder, db_topo
         waters_db_topo_path = ''
     
     return source_folder, building_db_topo_path, roads_db_topo_path, waters_db_topo_path
+
+
+def add_dol_input_to_cache_folder(bucket_name, experiment_data_folder, s3_db_forest_source_file, s3_db_waters_source_file, s3_db_zone_urba_file, s3_db_dol_source_file):
+    
+    db_cache_folder = os.path.join(experiment_data_folder, 'db-cache')
+    
+    session = boto3.session.Session(profile_name='default')
+    s3_client = session.client(service_name='s3',region_name='fr-par',use_ssl=True,endpoint_url='http://s3.fr-par.scw.cloud')
+    
+    logger.info(f"DOL inputs cache will be stored at : {db_cache_folder}")
+
+    if not os.path.isdir(db_cache_folder):
+        logger.error(f"Folder {db_cache_folder} is missing")
+    
+    db_forest_local_path = os.path.join(db_cache_folder, s3_db_forest_source_file.rsplit('/',1)[1])
+    if not os.path.isfile(db_forest_local_path):
+        # Download the archive part
+        logger.info(f"Downloading {s3_db_forest_source_file}...")
+        s3_client.download_file(Bucket=bucket_name, Key=s3_db_forest_source_file, Filename=db_forest_local_path)
+    
+    db_waters_local_path = os.path.join(db_cache_folder, s3_db_waters_source_file.rsplit('/',1)[1])
+    if not os.path.isfile(db_waters_local_path):
+        # Download the archive part
+        logger.info(f"Downloading {s3_db_waters_source_file}...")
+        s3_client.download_file(Bucket=bucket_name, Key=s3_db_waters_source_file, Filename=db_waters_local_path)
+        
+    db_zone_urba_local_path = os.path.join(db_cache_folder, s3_db_zone_urba_file.rsplit('/',1)[1])
+    if not os.path.isfile(db_zone_urba_local_path):
+        # Download the archive part
+        logger.info(f"Downloading {s3_db_zone_urba_file}...")
+        s3_client.download_file(Bucket=bucket_name, Key=s3_db_zone_urba_file, Filename=db_zone_urba_local_path)
+        
+    db_zone_dol_local_path = os.path.join(db_cache_folder, s3_db_dol_source_file.rsplit('/',1)[1])
+    if not os.path.isfile(db_zone_dol_local_path):
+        # Download the archive part
+        logger.info(f"Downloading {s3_db_dol_source_file}...")
+        s3_client.download_file(Bucket=bucket_name, Key=s3_db_dol_source_file, Filename=db_zone_dol_local_path)
+        
+    dol_local_sources = {"db_forest_path": db_forest_local_path, "db_waters_path": db_waters_local_path, "db_zone_urba_path": db_zone_urba_local_path, "db_zone_dol": db_zone_dol_local_path}
+    return dol_local_sources
 
     
 def upload_run_traces_to_s3(s3_runs_path,experiment_run_folder,image_set_name):

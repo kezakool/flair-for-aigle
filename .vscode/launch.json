@@ -26,23 +26,33 @@
         ]
         },
         {
-            "name": "run aigle segmentation",
+            "name": "run aigle segmentation water",
             "type": "debugpy",
             "request": "launch",
             "program": "/app/flair-for-aigle/main.py",
             "console": "integratedTerminal",
             "args": ["--config",
-            "/app/flair-for-aigle/configs/config_aigle_aerial_segmentation.json"
+            "/app/flair-for-aigle/configs/config_aigle_aerial_segmentation_water.json"
         ]
         },
         {
-            "name": "run aigle segmentation s3 config",
+            "name": "run aigle segmentation water s3 config",
             "type": "debugpy",
             "request": "launch",
             "program": "/app/flair-for-aigle/main.py",
             "console": "integratedTerminal",
             "args": ["--config",
             "s3://aigle-storage/aigle-runs/airflow-run-infos/2609300931_run_859/s3_config_aerial_segmentation_run_859.json"
+        ]
+        },
+        {
+            "name": "run aigle segmentation dol focus",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/app/flair-for-aigle/main.py",
+            "console": "integratedTerminal",
+            "args": ["--config",
+            "/app/flair-for-aigle/configs/config_aigle_aerial_segmentation_dol_focus.json"
         ]
         }
     ]

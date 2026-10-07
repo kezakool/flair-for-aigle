@@ -1,10 +1,12 @@
 import logging
-import random
+from xgboost import XGBClassifier
+import json
 import time
 import rasterio
 import pandas as pd
 import geopandas as gpd
 from shapely.ops import unary_union
+from shapely import geometry
 from dotenv import load_dotenv
 import os
 from tqdm import tqdm
@@ -14,12 +16,16 @@ from utils.logs import configure_logging, update_progress
 from utils.s3 import *
 from utils.export import Exporter
 from utils.map import Mapper
+from utils.dol import *
 
 logger = logging.getLogger(__name__)
 
-def run_fast_aigle_segmentation(run_config_args) -> None:
+def run_fast_aigle_segmentation_dol_focus(run_config_args) -> None:
     """
-    Run inference segmentation using the specified model type on the provided image folder.
+    Run inference segmentation based pipeline with dol object focus postprocessing
+        1. aerial img segmentation : using the specified model type on the provided image folder.
+        2. dol classification : use specific segmented classes as input features for an xgboost classification model
+        3. business postprocessing rules module : apply business rules with external dbs to provide a final classification
     """
     
     logger.info("Initializing process...")        
@@ -41,9 +47,18 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     s3_bucket_name = run_config_args.s3_bucket_name
     s3_aerial_archive_source_folder = run_config_args.s3_aerial_archive_source_folder
     s3_db_topo_archive_source_file = run_config_args.s3_db_topo_archive_source_file
+    
+    s3_db_forest_source_file = run_config_args.s3_db_forest_source_file
+    s3_db_waters_source_file = run_config_args.s3_db_waters_source_file
+    s3_db_zone_urba_file = run_config_args.s3_db_zone_urba_file
+    s3_db_dol_source_file = run_config_args.s3_db_dol_source_file
+    
     s3_run_folder_path = run_config_args.s3_run_folder_path 
-    model_id = run_config_args.model_id
-    model_config_path = run_config_args.model_config 
+    seg_model_id = run_config_args.seg_model_id
+    seg_model_config_path = run_config_args.seg_model_config 
+    
+    dol_model_id = run_config_args.dol_model_id
+    
     version = run_config_args.testset_name + '_' + run_config_args.version
     image_set_name = f"aigle_{images_type}_{dataset_type}_{version}"
     
@@ -61,18 +76,38 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     else :
         progression_file_path = None
     
+    logger.info("Starting ground segmentation configuration...")
     log_folder, result_folder = prepare_run_folder(experiment_run_folder, progression_file_path)
     images_folders, _, _, _ = prepare_local_data_folder(s3_bucket_name, s3_aerial_archive_source_folder, s3_db_topo_archive_source_file, experiment_data_folder, False, False)
     work_folder = os.path.join(experiment_data_folder, 'work')
     update_progress(25, 'initializing')
-    model_ckpt_path, model_threshold_filepath = prepare_local_model_folder(run_folder,model_id)
+    model_ckpt_path, model_threshold_filepath = prepare_local_model_folder(run_folder,seg_model_id)
     update_progress(50, 'initializing')
+    
+    logger.info("Starting dol focus xgboost classifier configuration...")
+    
+    
+    dol_model_path, dol_model_metadata_path = prepare_local_model_folder(run_folder,dol_model_id)
+    
+    # load xgb model
+    xgb_model = XGBClassifier()
+    xgb_model.load_model(dol_model_path)
+    # load metadata
+    with open(dol_model_metadata_path) as f:
+        metadata = json.load(f)
+    xgb_model.scale_pos_weight = metadata["scale_pos_weight"]
+    xgb_threshold = metadata["decision_threshold"]
+    update_progress(75, 'initializing')
+    
+    dol_specific_local_sources = add_dol_input_to_cache_folder(s3_bucket_name, experiment_data_folder, s3_db_forest_source_file, s3_db_waters_source_file, s3_db_zone_urba_file, s3_db_dol_source_file)
+    
+    update_progress(100, 'initializing')
     
     logger.info("Starting segmentation process...")
     start_total = time.time()
     
     # load aigle segmentation config: config is based on flair config + has geozone info + export infos
-    model_config_args = prep_config(model_config_path, model_ckpt_path, model_threshold_filepath, result_folder, log_folder, images_folders)
+    model_config_args = prep_config(seg_model_config_path, model_ckpt_path, model_threshold_filepath, result_folder, log_folder, images_folders)
     
     # load geozone contour and convert it to same crs as input images
     geozone_geometry_contour = load_geozone_contour(run_config_args)
@@ -116,73 +151,64 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
               
             inference_and_write(model, dataloader, tiles_gdf, model_config_args, output_files, ref_img)
             
-            segmentation_pipeline = 'water'
-            if segmentation_pipeline == 'water':
-                gdf_results = raster_to_polygons(output_files,n_jobs=4)
-                if len(gdf_results) >0 :
-                    gdf_results.to_file(raster_results_filepath, driver="GPKG")
-                    global_results.append(raster_results_filepath)
-                    
-            elif segmentation_pipeline == 'bush':
-                # load segmented tif
-                # load dol zones on area
-                # preprocess feature eng
-                # infer for each
-                
-                None
+            gdf_results = raster_to_polygons(output_files,n_jobs=4, min_area=1, simplification=0.1)
+            if len(gdf_results) >0 :
+                gdf_results.to_file(raster_results_filepath, driver="GPKG")
+                global_results.append(raster_results_filepath)
             
+            logger.info(f"[✓] segmentation completed in {time.time() - start_infer:.2f}s")
 
-                
-            logger.info(f"[✓] Inference completed in {time.time() - start_infer:.2f}s")
+    logger.info(f"\n[✓] Segmentation Total time: {time.time() - start_total:.2f}s")
+    logger.info(f"\n[✓] Segmentation Inference complete. Rasters written to: {work_folder}\n")
 
-    logger.info(f"\n[✓] Total time: {time.time() - start_total:.2f}s")
-    logger.info(f"\n[✓] Inference complete. Rasters written to: {work_folder}\n")
     
-    def postprocess_results(global_results_gdf, target_crs, geozone_geometry_contours):
-        """
-            postprocessing rules to :
-            - filter on geozone contour
-            - filter classes, 
-            - filter object size and 
-            - simplify topos
-            - convert to target crs
-        """
-        #  filter on contour, if partially included, then reduce the geometry to inside of the zone
-        contour_union = unary_union(geozone_geometry_contours)
-        
-        # Keep only geometries that intersect the contour
-        global_results_gdf = global_results_gdf[global_results_gdf.geometry.intersects(contour_union)]
-
-        # Clip geometries to the contour (only the part inside remains)
-        global_results_gdf.loc[:, "geometry"] = global_results_gdf.geometry.intersection(contour_union)
-
-        # filter classes
-        clean_results_gdf = global_results_gdf[global_results_gdf.class_id.isin([8,9,10,11,12,13,14])]
-              
-        # simplify geoms .simplify(simplification, preserve_topology=True)
-        clean_results_gdf.loc[:,'geometry'] = clean_results_gdf['geometry'].apply(lambda x : x.simplify(tolerance = 1, preserve_topology=True))
-        
-        # if area is < 20m² remove
-        clean_results_gdf = clean_results_gdf[clean_results_gdf.geometry.area > 20]
-        
-        # TODO improv : calculate the avg confidence of each segmented shape
-        clean_results_gdf['confidence'] = [random.uniform(0.3, 1) for x in range(len(clean_results_gdf))]
-        
-        clean_results_gdf = clean_results_gdf.to_crs(target_crs)
-        
-        return clean_results_gdf
-   
-    for file in os.listdir(result_folder):
-        if file.endswith('.gpkg'):
-            results_gdf = gpd.read_file(os.path.join(result_folder, file))
-            # postprocess results and overwrite
-            clean_results_gdf = postprocess_results(results_gdf, run_config_args.target_crs, geozone_geometry_contour)
-            clean_results_gdf.to_file(os.path.join(result_folder, file), driver="GPKG")
+    logger.info(f"Starting DOL Classification process...")
+    logger.info(f"Loading DOL inputs external sources...")
     
-     # aggregate all inference
-    gdf_results_list = [gpd.read_file(os.path.join(result_folder, file)) for file in os.listdir(result_folder) if file.endswith('.gpkg')]
-    global_results_gdf = pd.concat(gdf_results_list, ignore_index=True)
-        
+    # dol_specific_local_sources = {"db_forest_path": db_forest_local_path, "db_waters_path": db_waters_local_path, "db_zone_urba_path": db_zone_urba_local_path, "db_zone_dol": db_zone_dol_local_path}
+    gdf_dol_ilots = gpd.read_file(dol_specific_local_sources['db_zone_dol'])
+    gdf_dol_ilots_geozone = gdf_dol_ilots[gdf_dol_ilots.insee_com==geozone_code]
+    
+    gdf_forests_zones = gpd.read_file(dol_specific_local_sources['db_forest_path'])
+    gdf_waters_zones = gpd.read_file(dol_specific_local_sources['db_waters_path'])
+    gdf_u_zone = gpd.read_file(dol_specific_local_sources['db_zone_urba_path'])
+    
+    result_segmentation_files = [x for x in os.listdir(result_folder) if x.endswith('.tif')]
+    imgs_bounds = []
+    for img_file in result_segmentation_files:
+        img_path = os.path.join(result_folder,img_file)
+        with rasterio.open(img_path) as src :
+            bbox = src.bounds
+            bbox_polygon = geometry.box(*bbox)
+            imgs_bounds.append([img_path, bbox_polygon])
+
+    gdf_img = gpd.GeoDataFrame(data= imgs_bounds, columns=['image_path','geometry'], geometry='geometry', crs='EPSG:2154')
+    gdf_img.to_crs('EPSG:2154',inplace=True)
+    gdf_img.drop_duplicates(subset='image_path',inplace=True)
+    
+    gdf_geozone_data = gpd.sjoin(gdf_img,gdf_dol_ilots_geozone, how='right', predicate='intersects').drop(columns='index_left')
+    gdf_geozone_data = gdf_geozone_data[~gdf_geozone_data.image_path.isna()]
+    gdf_geozone_data.rename(columns={'geom':'geometry'}, inplace=True)
+    
+    logger.info(f"Preprocessing DOL classifier features...")
+    x_ml_features, x_business_features =  preprocess_features(gdf_geozone_data, gdf_forests_zones, gdf_waters_zones, gdf_u_zone, cache_dir = os.path.join(work_folder,'cache'), debug=False)
+    
+    logger.info(f"Starting DOL classifier inference...")
+    y_proba = xgb_model.predict_proba(x_ml_features)[:, 1]
+
+    gdf_geozone_data["proba_control"] = y_proba
+    gdf_geozone_data["pred_control"] = 0
+    gdf_geozone_data.loc[gdf_geozone_data["proba_control"] >= xgb_threshold,"pred_control"] = 1
+    gdf_geozone_data.set_geometry("geometry",inplace=True)
+    
+    logger.info(f"Processing DOL business rules on inference results...")
+    gdf_dol_classification_results = postprocess_pred_control(gdf_geozone_data, x_business_features)
+
+    gdf_dol_classification_results.to_file(os.path.join(result_folder,image_set_name) + '.gpkg', driver="GPKG")
+    
+    logger.info(f"Exporting DOL results...")
+    
+    """    
     # Set up exporter and mapper
     description = 'debug_mode' if debug_mode else image_set_name
     export_context = {
@@ -196,6 +222,7 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
     mapper = Mapper(model_config_args['tasks'][0]['class_names'], export_context['batch_name'])
     exporter = Exporter(input_crs)
     
+
     # Export results
     exporter.export_to_aigle(global_results_gdf, target_crs, result_folder, mapper, export_context)
     logger.info("Prediction process complete.")
@@ -211,4 +238,4 @@ def run_fast_aigle_segmentation(run_config_args) -> None:
                 os.unlink(item_path)  # remove file or symlink
             elif os.path.isdir(item_path):
                 shutil.rmtree(item_path)  # remove subdirectory
-        logger.info(f"data folder cleaned (contents removed): {data_folder}")
+        logger.info(f"data folder cleaned (contents removed): {data_folder}") """

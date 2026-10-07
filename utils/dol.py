@@ -360,7 +360,7 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
     with rasterio.open(src_path) as src:
         pixel_area = abs(src.transform.a * src.transform.e)
         for zone_name, zone_geom in zones.items():
-            print(f"Starting data extraction on {zone_geom} --- from {src} - crs {src.crs} ")
+            #print(f"Starting data extraction on {zone_geom} --- from {src} - crs {src.crs} ")
             try :
                 
                 data = extract_zone_raster(src, zone_geom, features_bands)
@@ -453,9 +453,6 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
     else: 
         df_wide['has_contact_river_zone'] = [1]
 
-    if sample_id in [26591.0, 26883.0]:
-        print("debug")
-
     # Spatial feature on intersections with u zones 
     buffered_for_u = geometry.buffer(0)
     
@@ -465,7 +462,6 @@ def extract_features(src_path, geometry, gdf_forest_zones=None, gdf_water_zones=
         df_wide['has_contact_u_zone'] = [0]
     else: 
         df_wide['has_contact_u_zone'] = [1]
-
 
     return df_wide
 
@@ -535,6 +531,7 @@ def postprocess_pred_control(test_gdf: gpd.GeoDataFrame, x_test_business_feature
     # apply simplified rule : urban zone without contact with forest are set to 0
     mask_u_zone_to_0= ((gdf["has_contact_u_zone"] == 1) & (gdf["has_contact_forest_zone"] == 0))
     gdf.loc[mask_u_zone_to_0, "pred_control_pp"] = 0
+    
     return gdf
 
                  
@@ -608,13 +605,16 @@ def preprocess_features(set_gdf, gdf_forests, gdf_waters, gdf_u_zones, cache_dir
 
     if debug:
         set_gdf = set_gdf[:min(10,len(set_gdf))]
+
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
     
     cache_filename = os.path.join(cache_dir,'set_features.parquet')
     if not os.path.exists(cache_filename):    
 
         for row in set_gdf.iterrows():
             
-            df_feature_row = extract_features(row[1].image_path, row[1].geom, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters, gdf_u_zones=gdf_u_zones, sample_id=row[0],debug=debug)
+            df_feature_row = extract_features(row[1].image_path, row[1].geometry, gdf_forest_zones=gdf_forests, gdf_water_zones=gdf_waters, gdf_u_zones=gdf_u_zones, sample_id=row[0],debug=debug)
             df_features_list.append(df_feature_row)
             
         df_set = pd.concat(df_features_list)
