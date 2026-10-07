@@ -17,6 +17,7 @@ from utils.s3 import *
 from utils.export import Exporter
 from utils.map import Mapper
 from utils.dol import *
+from dol.model import DOLClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -89,14 +90,13 @@ def run_fast_aigle_segmentation_dol_focus(run_config_args) -> None:
     
     dol_model_path, dol_model_metadata_path = prepare_local_model_folder(run_folder,dol_model_id)
     
-    # load xgb model
-    xgb_model = XGBClassifier()
-    xgb_model.load_model(dol_model_path)
-    # load metadata
-    with open(dol_model_metadata_path) as f:
-        metadata = json.load(f)
-    xgb_model.scale_pos_weight = metadata["scale_pos_weight"]
-    xgb_threshold = metadata["decision_threshold"]
+    dol_classifier = DOLClassifier(
+        model_path=dol_model_path,
+        model_metadata_path=dol_model_metadata_path,
+        geozone_code=geozone_code,
+        work_folder=work_folder,
+        debug=False,
+    )
     update_progress(75, 'initializing')
     
     dol_specific_local_sources = add_dol_input_to_cache_folder(s3_bucket_name, experiment_data_folder, s3_db_forest_source_file, s3_db_waters_source_file, s3_db_zone_urba_file, s3_db_dol_source_file)
@@ -164,69 +164,36 @@ def run_fast_aigle_segmentation_dol_focus(run_config_args) -> None:
     
     logger.info(f"Starting DOL Classification process...")
     logger.info(f"Loading DOL inputs external sources...")
-    
-    # dol_specific_local_sources = {"db_forest_path": db_forest_local_path, "db_waters_path": db_waters_local_path, "db_zone_urba_path": db_zone_urba_local_path, "db_zone_dol": db_zone_dol_local_path}
-    gdf_dol_ilots = gpd.read_file(dol_specific_local_sources['db_zone_dol'])
-    gdf_dol_ilots_geozone = gdf_dol_ilots[gdf_dol_ilots.insee_com==geozone_code]
-    
-    gdf_forests_zones = gpd.read_file(dol_specific_local_sources['db_forest_path'])
-    gdf_waters_zones = gpd.read_file(dol_specific_local_sources['db_waters_path'])
-    gdf_u_zone = gpd.read_file(dol_specific_local_sources['db_zone_urba_path'])
-    
-    result_segmentation_files = [x for x in os.listdir(result_folder) if x.endswith('.tif')]
-    imgs_bounds = []
-    for img_file in result_segmentation_files:
-        img_path = os.path.join(result_folder,img_file)
-        with rasterio.open(img_path) as src :
-            bbox = src.bounds
-            bbox_polygon = geometry.box(*bbox)
-            imgs_bounds.append([img_path, bbox_polygon])
 
-    gdf_img = gpd.GeoDataFrame(data= imgs_bounds, columns=['image_path','geometry'], geometry='geometry', crs='EPSG:2154')
-    gdf_img.to_crs('EPSG:2154',inplace=True)
-    gdf_img.drop_duplicates(subset='image_path',inplace=True)
+    gdf_dol_classification_results = dol_classifier.run(
+        result_folder=result_folder,
+        dol_specific_local_sources=dol_specific_local_sources,
+    )
     
-    gdf_geozone_data = gpd.sjoin(gdf_img,gdf_dol_ilots_geozone, how='right', predicate='intersects').drop(columns='index_left')
-    gdf_geozone_data = gdf_geozone_data[~gdf_geozone_data.image_path.isna()]
-    gdf_geozone_data.rename(columns={'geom':'geometry'}, inplace=True)
-    
-    logger.info(f"Preprocessing DOL classifier features...")
-    x_ml_features, x_business_features =  preprocess_features(gdf_geozone_data, gdf_forests_zones, gdf_waters_zones, gdf_u_zone, cache_dir = os.path.join(work_folder,'cache'), debug=False)
-    
-    logger.info(f"Starting DOL classifier inference...")
-    y_proba = xgb_model.predict_proba(x_ml_features)[:, 1]
-
-    gdf_geozone_data["proba_control"] = y_proba
-    gdf_geozone_data["pred_control"] = 0
-    gdf_geozone_data.loc[gdf_geozone_data["proba_control"] >= xgb_threshold,"pred_control"] = 1
-    gdf_geozone_data.set_geometry("geometry",inplace=True)
-    
-    logger.info(f"Processing DOL business rules on inference results...")
-    gdf_dol_classification_results = postprocess_pred_control(gdf_geozone_data, x_business_features)
-
     gdf_dol_classification_results.to_file(os.path.join(result_folder,image_set_name) + '.gpkg', driver="GPKG")
     
     logger.info(f"Exporting DOL results...")
     
     """    
-    # Set up exporter and mapper
-    description = 'debug_mode' if debug_mode else image_set_name
-    export_context = {
-        'batch_name': image_set_name,
-        'model_id': model_id,
-        'export_sql': export_sql,
-        'description': description,
-        'add_bd_topo': False,
-    }
+        # Set up exporter and mapper
+        description = 'debug_mode' if debug_mode else image_set_name
+        export_context = {
+            'batch_name': image_set_name,
+            'model_id': model_id,
+            'export_sql': export_sql,
+            'description': description,
+            'add_bd_topo': False,
+        }
 
-    mapper = Mapper(model_config_args['tasks'][0]['class_names'], export_context['batch_name'])
-    exporter = Exporter(input_crs)
-    
+        mapper = Mapper(model_config_args['tasks'][0]['class_names'], export_context['batch_name'])
+        exporter = Exporter(input_crs)
+        
 
-    # Export results
-    exporter.export_to_aigle(global_results_gdf, target_crs, result_folder, mapper, export_context)
-    logger.info("Prediction process complete.")
-    update_progress(100, 'exporting')
+        # Export results
+        exporter.export_to_aigle(global_results_gdf, target_crs, result_folder, mapper, export_context)
+        logger.info("Prediction process complete.")
+        update_progress(100, 'exporting')
+    """
     s3_runs_path = 's3://'+ s3_bucket_name +'/' + s3_run_folder_path
     upload_run_traces_to_s3(s3_runs_path,experiment_run_folder,image_set_name)
         
@@ -238,4 +205,4 @@ def run_fast_aigle_segmentation_dol_focus(run_config_args) -> None:
                 os.unlink(item_path)  # remove file or symlink
             elif os.path.isdir(item_path):
                 shutil.rmtree(item_path)  # remove subdirectory
-        logger.info(f"data folder cleaned (contents removed): {data_folder}") """
+        logger.info(f"data folder cleaned (contents removed): {data_folder}")
