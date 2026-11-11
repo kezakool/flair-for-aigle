@@ -97,8 +97,10 @@ def main():
     # Process selection
     process = combined_args.process
     if process == "run_fast_aigle_segmentations_water":
+        combined_args.testset_name = combined_args.geozones_codes + '_water'
         run_fast_aigle_segmentation_water(combined_args) 
     elif process == "run_fast_aigle_segmentation_dol_focus":
+        combined_args.testset_name = combined_args.geozones_codes + '_dol'
         run_fast_aigle_segmentation_dol_focus(combined_args) 
     else:
         print("Unknown process specified.")
